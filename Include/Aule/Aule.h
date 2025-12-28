@@ -1,27 +1,55 @@
+#include "vulkan/vulkan_core.h"
+#include <_types/_uint32_t.h>
+#include <vector>
 namespace Aule
 {
-    struct DeviceContext
+    struct Context
     {
-        VkInstance       vkInstance;
-        VkPhysicalDevice vkPhysicalDevice;
-        VkDevice         vkLogicalDevice;
-        VmaAllocator     vkAllocator;
-    };
+        GLFWwindow*              window;
+        uint64_t                 frameCount;
+        VkInstance               instance;
+        VkPhysicalDevice         devicePhysical;
+        VkDevice                 deviceLogical;
+        VmaAllocator             allocator;
+        uint32_t                 queueIndex;
+        VkQueue                  queue;
+        VkSurfaceKHR             surface;
+        VkSurfaceCapabilitiesKHR surfaceInfo;
+        VkSwapchainKHR           swapchain;
+        uint32_t                 swapchainImageCount;
+        VkFormat                 swapchainFormat;
 
-    struct FrameContext
-    {
-        VkCommandBuffer vkCmd;
+        // Index with the `swapchainIndex` passed by the Dispatch callback.
+        std::vector<VkImage>     swapchainImages;
+        std::vector<VkImageView> swapchainImageViews;
+
+        // Index with the `frameIndex` passed by the Dispatch callback.
+        std::vector<VkCommandPool>   frameCommandPool;
+        std::vector<VkCommandBuffer> frameCommandBuffer;
+        std::vector<VkSemaphore>     frameSemaphoreImageAvailable;
+        std::vector<VkSemaphore>     frameSemaphoreRenderComplete;
+        std::vector<VkFence>         frameFenceRenderComplete;
     };
 
     struct Params
     {
-        const char*                        windowName;
-        uint32_t                           windowWidth;
-        uint32_t                           windowHeight;
-        std::function<void()>              setupCallback;
-        std::function<void(FrameContext&)> renderCallback;
+        // Basic operating system window information.
+        const char* windowName;
+        uint32_t    windowWidth;
+        uint32_t    windowHeight;
+
+        // Specify how many frames can be queued by the swapchain.
+        uint32_t numFramesInFlight;
+
+        uint32_t maxSupportedImguiImages = 512u;
     };
 
-    void Go(const Params& params);
+    // Create's an operating system window and Vulkan runtime, with a linking swapchain
+    // Return the context to user for them to create application-specific things.
+    const Context& Initialize(const Params& params);
+
+    // Dispatch a renderloop handling swapchain, frames in flight, basic synchronization.
+    // and call back the user render function to fill out commands for current frame.
+    void Dispatch(std::function<void(uint32_t swapchainIndex, uint32_t frameIndex)> renderFrameCallback);
 
 } // namespace Aule

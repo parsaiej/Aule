@@ -39,6 +39,7 @@ file(GLOB IMGUI_SOURCES
 add_library(${PROJECT_NAME}
     STATIC
         Source/Aule.cpp 
+        Source/AulePrecompiled.cpp 
         ${IMGUI_SOURCES}
 )
 
