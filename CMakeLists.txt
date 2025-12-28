@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 # Build System
 # --------------------------------
 
-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/External/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "")
+set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/External/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "")
 
 set(PROJECT_NAME Aule)
 
@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(EXTERNAL_DIR ${CMAKE_SOURCE_DIR}/External/)
+set(EXTERNAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/External/)
 
 # Packages
 # --------------------------------
