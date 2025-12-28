@@ -39,7 +39,7 @@ namespace Aule
         uint32_t    windowHeight;
 
         // Specify how many frames can be queued by the swapchain.
-        uint32_t numFramesInFlight;
+        uint32_t numFramesInFlight = 2u;
 
         // Due to how ImGui Vulkan images work we need to specify descriptor pool size.
         uint32_t maxSupportedImguiImages = 512u;

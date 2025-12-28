@@ -310,7 +310,69 @@ void Aule::Dispatch(std::function<void(uint32_t, uint32_t)> renderFrameCallback)
 
         // -----------------------
 
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // -----------------------
+
         renderFrameCallback(swapchainIndex, frameIndex);
+
+        // -----------------------
+
+        VkImageMemoryBarrier2 imageBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+        {
+            imageBarrier.image                       = g_Context.swapchainImages[swapchainIndex];
+            imageBarrier.oldLayout                   = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            imageBarrier.newLayout                   = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            imageBarrier.srcAccessMask               = VK_ACCESS_2_MEMORY_READ_BIT;
+            imageBarrier.dstAccessMask               = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            imageBarrier.srcStageMask                = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            imageBarrier.dstStageMask                = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imageBarrier.subresourceRange.layerCount = 1u;
+            imageBarrier.subresourceRange.levelCount = 1u;
+        }
+
+        VkDependencyInfo barriers = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+        {
+            barriers.imageMemoryBarrierCount = 1u;
+            barriers.pImageMemoryBarriers    = &imageBarrier;
+        }
+
+        vkCmdPipelineBarrier2(g_Context.frameCommandBuffer[frameIndex], &barriers);
+
+        VkRenderingAttachmentInfo attachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        {
+            attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+            attachmentInfo.imageView   = g_Context.swapchainImageViews[swapchainIndex];
+        }
+
+        VkRenderingInfo renderingInfo = { VK_STRUCTURE_TYPE_RENDERING_INFO };
+        {
+            renderingInfo.colorAttachmentCount = 1u;
+            renderingInfo.pColorAttachments    = &attachmentInfo;
+            renderingInfo.layerCount           = 1u;
+            renderingInfo.renderArea.extent    = g_Context.surfaceInfo.currentExtent;
+        }
+        vkCmdBeginRendering(g_Context.frameCommandBuffer[frameIndex], &renderingInfo);
+
+        ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), g_Context.frameCommandBuffer[frameIndex]);
+
+        vkCmdEndRendering(g_Context.frameCommandBuffer[frameIndex]);
+
+        {
+            imageBarrier.oldLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            imageBarrier.newLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            imageBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            imageBarrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+            imageBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            imageBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+        }
+        vkCmdPipelineBarrier2(g_Context.frameCommandBuffer[frameIndex], &barriers);
 
         // -----------------------
 
