@@ -1,6 +1,7 @@
-#include "vulkan/vulkan_core.h"
+#include "imgui.h"
 #include <Aule/Aule.h>
 
+#include <array>
 #include <stdexcept>
 #include <iostream>
 
@@ -18,15 +19,35 @@ int main(int argc, char** argv)
     {
         auto context = Aule::Initialize(params);
 
-        // Perform initialization of resources with the context.
+        // Keep some barries laying around.
+        std::array<VkImageMemoryBarrier2, 4u>  barriersI({ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 });
+        std::array<VkBufferMemoryBarrier2, 4u> barriersB({ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2 });
 
-        // Invoke the renderloop.
+        VkDependencyInfo barriers = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+
         Aule::Dispatch(
             [&](uint32_t swapchainIndex, uint32_t frameIndex)
             {
                 auto& cmd = context.frameCommandBuffer[frameIndex];
 
                 // -----
+
+                {
+                    barriersI[0].image                       = context.swapchainImages[swapchainIndex];
+                    barriersI[0].oldLayout                   = VK_IMAGE_LAYOUT_UNDEFINED;
+                    barriersI[0].newLayout                   = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                    barriersI[0].srcAccessMask               = VK_ACCESS_2_NONE;
+                    barriersI[0].dstAccessMask               = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    barriersI[0].srcStageMask                = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    barriersI[0].dstStageMask                = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                    barriersI[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    barriersI[0].subresourceRange.layerCount = 1u;
+                    barriersI[0].subresourceRange.levelCount = 1u;
+
+                    barriers.pImageMemoryBarriers    = &barriersI[0];
+                    barriers.imageMemoryBarrierCount = 1u;
+                }
+                vkCmdPipelineBarrier2(cmd, &barriers);
 
                 // -----
 
@@ -39,7 +60,28 @@ int main(int argc, char** argv)
 
                 VkClearColorValue clearColor = { 1, 0, 0, 0 };
 
-                vkCmdClearColorImage(cmd, context.swapchainImages[swapchainIndex], VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1u, &clearSubresourceRange);
+                vkCmdClearColorImage(cmd,
+                                     context.swapchainImages[swapchainIndex],
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     &clearColor,
+                                     1u,
+                                     &clearSubresourceRange);
+
+                // -----
+
+                {
+                    barriersI[0].oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                    barriersI[0].newLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                    barriersI[0].srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    barriersI[0].dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+                    barriersI[0].srcStageMask  = VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                    barriersI[0].dstStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+                }
+                vkCmdPipelineBarrier2(cmd, &barriers);
+
+                // -----
+
+                ImGui::ShowDemoWindow();
             });
     }
     catch (std::runtime_error& e)

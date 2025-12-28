@@ -41,6 +41,7 @@ namespace Aule
         // Specify how many frames can be queued by the swapchain.
         uint32_t numFramesInFlight;
 
+        // Due to how ImGui Vulkan images work we need to specify descriptor pool size.
         uint32_t maxSupportedImguiImages = 512u;
     };
 
@@ -49,7 +50,8 @@ namespace Aule
     const Context& Initialize(const Params& params);
 
     // Dispatch a renderloop handling swapchain, frames in flight, basic synchronization.
-    // and call back the user render function to fill out commands for current frame.
+    // and call back the user render function to fill out commands for current frame. Callback MUST
+    // transfer the current swapchain image to PRESENT.
     void Dispatch(std::function<void(uint32_t swapchainIndex, uint32_t frameIndex)> renderFrameCallback);
 
 } // namespace Aule

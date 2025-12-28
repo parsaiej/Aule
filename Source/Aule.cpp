@@ -339,5 +339,9 @@ void Aule::Dispatch(std::function<void(uint32_t, uint32_t)> renderFrameCallback)
             presentInfo.pWaitSemaphores    = &g_Context.frameSemaphoreRenderComplete[frameIndex];
         }
         ThrowOnFail(vkQueuePresentKHR(g_Context.queue, &presentInfo));
+
+        // -----------------------
+
+        frameIndex = (frameIndex + 1u) % g_Context.frameCommandBuffer.size();
     }
 }
