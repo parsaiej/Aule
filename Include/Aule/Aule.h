@@ -1,6 +1,3 @@
-#include "vulkan/vulkan_core.h"
-#include <_types/_uint32_t.h>
-#include <vector>
 namespace Aule
 {
     struct Context

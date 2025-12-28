@@ -5,10 +5,6 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/External/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "")
 
-set(PROJECT_NAME Aule)
-
-project(${PROJECT_NAME} VERSION 1.0)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -36,7 +32,7 @@ file(GLOB IMGUI_SOURCES
 # Executable
 # --------------------------------
 
-add_library(${PROJECT_NAME}
+add_library(Aule
     STATIC
         Source/Aule.cpp 
         Source/AulePrecompiled.cpp 
@@ -46,7 +42,7 @@ add_library(${PROJECT_NAME}
 # PCH
 # --------------------------------
 
-target_precompile_headers(${PROJECT_NAME} 
+target_precompile_headers(Aule
     PUBLIC 
         Source/AulePrecompiled.h
 )
@@ -54,7 +50,7 @@ target_precompile_headers(${PROJECT_NAME}
 # Includes
 # --------------------------------
 
-target_include_directories(${PROJECT_NAME} 
+target_include_directories(Aule
     PUBLIC 
         ${EXTERNAL_DIR}/
         ${EXTERNAL_DIR}/imgui/
@@ -64,7 +60,7 @@ target_include_directories(${PROJECT_NAME}
 # Link
 # --------------------------------
 
-target_link_libraries(${PROJECT_NAME} 
+target_link_libraries(Aule
     PUBLIC 
         volk::volk 
         glfw
@@ -74,7 +70,7 @@ target_link_libraries(${PROJECT_NAME}
 # Compile flags
 # --------------------------------
 
-target_compile_definitions(${PROJECT_NAME}
+target_compile_definitions(Aule
     PUBLIC
         IMGUI_DEFINE_MATH_OPERATORS
         IMGUI_IMPL_VULKAN_USE_VOLK
