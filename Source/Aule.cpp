@@ -1,6 +1,4 @@
 #include "../Include/Aule/Aule.h"
-#include "vulkan/vulkan_core.h"
-#include <mutex>
 
 using namespace Aule;
 
