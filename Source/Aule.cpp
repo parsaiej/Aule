@@ -1,5 +1,6 @@
 #include "../Include/Aule/Aule.h"
 #include "vulkan/vulkan_core.h"
+#include <mutex>
 
 using namespace Aule;
 
@@ -17,7 +18,7 @@ Context g_Context = {};
 // Implementation
 // -----------------------
 
-const Context& Aule::Initialize(const Params& params)
+Context* Aule::Initialize(const Params& params)
 {
     // ----------------------------------
 
@@ -275,7 +276,7 @@ const Context& Aule::Initialize(const Params& params)
 
     // -----------------------
 
-    return g_Context;
+    return &g_Context;
 }
 
 void Aule::Dispatch(std::function<void(uint32_t, uint32_t)> renderFrameCallback)
@@ -359,6 +360,9 @@ void Aule::Dispatch(std::function<void(uint32_t, uint32_t)> renderFrameCallback)
         }
         vkCmdBeginRendering(g_Context.frameCommandBuffer[frameIndex], &renderingInfo);
 
+        // Lock here since imgui may submit to it...
+        std::lock_guard _(g_Context.queueMutex);
+
         ImGui::Render();
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), g_Context.frameCommandBuffer[frameIndex]);
 
@@ -378,9 +382,10 @@ void Aule::Dispatch(std::function<void(uint32_t, uint32_t)> renderFrameCallback)
 
         ThrowOnFail(vkEndCommandBuffer(g_Context.frameCommandBuffer[frameIndex]));
 
+        const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
         VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         {
-            constexpr VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
             submitInfo.commandBufferCount   = 1u;
             submitInfo.pCommandBuffers      = &g_Context.frameCommandBuffer[frameIndex];

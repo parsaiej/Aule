@@ -9,6 +9,7 @@ namespace Aule
         VkDevice                 deviceLogical;
         VmaAllocator             allocator;
         uint32_t                 queueIndex;
+        std::mutex               queueMutex;
         VkQueue                  queue;
         VkSurfaceKHR             surface;
         VkSurfaceCapabilitiesKHR surfaceInfo;
@@ -44,7 +45,8 @@ namespace Aule
 
     // Create's an operating system window and Vulkan runtime, with a linking swapchain
     // Return the context to user for them to create application-specific things.
-    const Context& Initialize(const Params& params);
+    // Return mutable context due to the queue mutex.
+    Context* Initialize(const Params& params);
 
     // Dispatch a renderloop handling swapchain, frames in flight, basic synchronization.
     // and call back the user render function to fill out commands for current frame. Callback MUST
