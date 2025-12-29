@@ -73,6 +73,8 @@ Context* Aule::Initialize(const Params& params)
     // Select device #0 for now.
     g_Context.devicePhysical = physicalDevices[0];
 
+    vkGetPhysicalDeviceProperties(g_Context.devicePhysical, &g_Context.deviceProperties);
+
     uint32_t queueFamilyCount;
     vkGetPhysicalDeviceQueueFamilyProperties(g_Context.devicePhysical, &queueFamilyCount, nullptr);
 

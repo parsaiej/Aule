@@ -2,20 +2,21 @@ namespace Aule
 {
     struct Context
     {
-        GLFWwindow*              window;
-        uint64_t                 frameCount;
-        VkInstance               instance;
-        VkPhysicalDevice         devicePhysical;
-        VkDevice                 deviceLogical;
-        VmaAllocator             allocator;
-        uint32_t                 queueIndex;
-        std::mutex               queueMutex;
-        VkQueue                  queue;
-        VkSurfaceKHR             surface;
-        VkSurfaceCapabilitiesKHR surfaceInfo;
-        VkSwapchainKHR           swapchain;
-        uint32_t                 swapchainImageCount;
-        VkFormat                 swapchainFormat;
+        GLFWwindow*                window;
+        uint64_t                   frameCount;
+        VkInstance                 instance;
+        VkPhysicalDevice           devicePhysical;
+        VkDevice                   deviceLogical;
+        VkPhysicalDeviceProperties deviceProperties;
+        VmaAllocator               allocator;
+        uint32_t                   queueIndex;
+        std::mutex                 queueMutex;
+        VkQueue                    queue;
+        VkSurfaceKHR               surface;
+        VkSurfaceCapabilitiesKHR   surfaceInfo;
+        VkSwapchainKHR             swapchain;
+        uint32_t                   swapchainImageCount;
+        VkFormat                   swapchainFormat;
 
         // Index with the `swapchainIndex` passed by the Dispatch callback.
         std::vector<VkImage>     swapchainImages;
