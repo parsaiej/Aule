@@ -20,8 +20,6 @@
  * SOFTWARE.
  */
 
-#include <cstdint>
-#include <unordered_map>
 namespace Aule
 {
     struct Params
@@ -105,6 +103,6 @@ namespace Aule
     // image to PRESENT.
     void Dispatch(Context&                                 context,
                   std::function<void(uint32_t frameIndex)> renderFrameCallback,
-                  std::mutex* pDispatchQueueMutex = nullptr);
+                  std::mutex*                              pDispatchQueueMutex = nullptr);
 
 } // namespace Aule

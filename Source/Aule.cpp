@@ -71,12 +71,9 @@ Context Aule::CreateContext(const Params& params)
     }
 
     uint32_t requiredExtensionsCountGLFW;
-    auto     requiredExtensionsGLFW =
-        glfwGetRequiredInstanceExtensions(&requiredExtensionsCountGLFW);
+    auto requiredExtensionsGLFW = glfwGetRequiredInstanceExtensions(&requiredExtensionsCountGLFW);
 
-    VkInstanceCreateInfo instanceInfo = {
-        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
-    };
+    VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
     {
         instanceInfo.pApplicationInfo        = &applicationInfo;
         instanceInfo.enabledExtensionCount   = requiredExtensionsCountGLFW;
@@ -90,17 +87,14 @@ Context Aule::CreateContext(const Params& params)
     // ----------------------------------
 
     uint32_t physicalDeviceCount;
-    ThrowOnFail(vkEnumeratePhysicalDevices(ctx.instance,
-                                           &physicalDeviceCount,
-                                           nullptr));
+    ThrowOnFail(vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, nullptr));
 
     // No drivers found!
     ThrowOnFail(physicalDeviceCount > 0);
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    ThrowOnFail(vkEnumeratePhysicalDevices(ctx.instance,
-                                           &physicalDeviceCount,
-                                           physicalDevices.data()));
+    ThrowOnFail(
+        vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, physicalDevices.data()));
 
     ctx.selectedPhysicalDevice = VK_NULL_HANDLE;
 
@@ -137,12 +131,10 @@ Context Aule::CreateContext(const Params& params)
                                              &ctx.queueFamilyCount,
                                              ctx.queueFamilyProperties.data());
 
-    for (uint32_t queueFamilyIndex = 0u;
-         queueFamilyIndex < ctx.queueFamilyCount;
+    for (uint32_t queueFamilyIndex = 0u; queueFamilyIndex < ctx.queueFamilyCount;
          queueFamilyIndex++)
     {
-        if (!(ctx.queueFamilyProperties[queueFamilyIndex].queueFlags &
-              VK_QUEUE_GRAPHICS_BIT))
+        if (!(ctx.queueFamilyProperties[queueFamilyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT))
             continue;
 
         // Just grab first graphics compatible queue.
@@ -158,8 +150,7 @@ Context Aule::CreateContext(const Params& params)
     // Currently we make no effort to prioritize one over the other...
     const float kQueuePriority = 1.0f;
 
-    for (uint32_t queueFamilyIndex = 0u;
-         queueFamilyIndex < ctx.queueFamilyCount;
+    for (uint32_t queueFamilyIndex = 0u; queueFamilyIndex < ctx.queueFamilyCount;
          queueFamilyIndex++)
     {
         // ONE queue will be created for each family.
@@ -170,67 +161,82 @@ Context Aule::CreateContext(const Params& params)
 
     VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 
-    std::vector<const char*> deviceExtensions;
+    std::vector<const char*> extensions;
     {
-        deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-        deviceExtensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+        extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
+        // Emplace user-requested extenstions.
+        extensions.insert(extensions.end(),
+                          params.deviceExtensions.begin(),
+                          params.deviceExtensions.end());
     }
 
-    VkPhysicalDeviceSynchronization2Features deviceSyncFeature = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES
-    };
+    // First check.
     {
-        deviceSyncFeature.synchronization2 = VK_TRUE;
+        uint32_t supportedDeviceExtensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(ctx.selectedPhysicalDevice,
+                                             nullptr,
+                                             &supportedDeviceExtensionCount,
+                                             nullptr);
+
+        std::vector<VkExtensionProperties> supportedDeviceExtensions(supportedDeviceExtensionCount);
+        vkEnumerateDeviceExtensionProperties(ctx.selectedPhysicalDevice,
+                                             nullptr,
+                                             &supportedDeviceExtensionCount,
+                                             supportedDeviceExtensions.data());
+
+        auto DeviceExtensionSupported = [&](const char* extension)
+        {
+            for (const auto& supportedExtension : supportedDeviceExtensions)
+            {
+                if (strcmp(supportedExtension.extensionName, extension) == 0)
+                    return true;
+            }
+
+            return false;
+        };
+
+        for (const auto& requestedExtension : extensions)
+            ThrowOnFail(DeviceExtensionSupported(requestedExtension));
     }
 
-    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES
-    };
-    {
-        dynamicRenderingFeature.pNext            = &deviceSyncFeature;
-        dynamicRenderingFeature.dynamicRendering = VK_TRUE;
-    }
+    VkPhysicalDeviceFeatures2                features                = {};
+    VkPhysicalDeviceSynchronization2Features featureSync2            = {};
+    VkPhysicalDeviceDynamicRenderingFeatures featureDynamicRendering = {};
 
-    VkPhysicalDeviceFeatures2 deviceFeatures = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2
-    };
-    {
-        deviceFeatures.pNext = &dynamicRenderingFeature;
-    }
+    features.sType                = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    featureSync2.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    featureDynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
 
-    deviceInfo.pNext                   = &deviceFeatures;
+    features.pNext     = &featureSync2;
+    featureSync2.pNext = &featureDynamicRendering;
+
+    featureSync2.synchronization2            = VK_TRUE;
+    featureDynamicRendering.dynamicRendering = VK_TRUE;
+
+    deviceInfo.pNext                   = &features;
     deviceInfo.queueCreateInfoCount    = queueCreateInfos.size();
     deviceInfo.pQueueCreateInfos       = queueCreateInfos.data();
-    deviceInfo.enabledExtensionCount   = deviceExtensions.size();
-    deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    deviceInfo.enabledExtensionCount   = extensions.size();
+    deviceInfo.ppEnabledExtensionNames = extensions.data();
 
-    ThrowOnFail(vkCreateDevice(ctx.selectedPhysicalDevice,
-                               &deviceInfo,
-                               nullptr,
-                               &ctx.device));
+    ThrowOnFail(vkCreateDevice(ctx.selectedPhysicalDevice, &deviceInfo, nullptr, &ctx.device));
 
     volkLoadDevice(ctx.device);
 
-    for (uint32_t queueFamilyIndex = 0u;
-         queueFamilyIndex < ctx.queueFamilyCount;
+    for (uint32_t queueFamilyIndex = 0u; queueFamilyIndex < ctx.queueFamilyCount;
          queueFamilyIndex++)
     {
         // Load queues into the map
-        vkGetDeviceQueue(ctx.device,
-                         queueFamilyIndex,
-                         0u,
-                         &ctx.queues[queueFamilyIndex]);
+        vkGetDeviceQueue(ctx.device, queueFamilyIndex, 0u, &ctx.queues[queueFamilyIndex]);
     }
 
     // Surface
     // ---------------------
 
-    ThrowOnFail(glfwCreateWindowSurface(ctx.instance,
-                                        ctx.window,
-                                        nullptr,
-                                        &ctx.surface));
+    ThrowOnFail(glfwCreateWindowSurface(ctx.instance, ctx.window, nullptr, &ctx.surface));
 
     uint32_t surfaceFormatCount;
     ThrowOnFail(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx.selectedPhysicalDevice,
@@ -243,14 +249,11 @@ Context Aule::CreateContext(const Params& params)
                                                      ctx.surface,
                                                      &surfaceFormatCount,
                                                      surfaceFormats.data()));
-    ThrowOnFail(
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.selectedPhysicalDevice,
-                                                  ctx.surface,
-                                                  &ctx.surfaceInfo));
+    ThrowOnFail(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.selectedPhysicalDevice,
+                                                          ctx.surface,
+                                                          &ctx.surfaceInfo));
 
-    VkSwapchainCreateInfoKHR swapChainInfo = {
-        VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR
-    };
+    VkSwapchainCreateInfoKHR swapChainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 
     {
         swapChainInfo.presentMode         = VK_PRESENT_MODE_FIFO_KHR;
@@ -262,20 +265,14 @@ Context Aule::CreateContext(const Params& params)
         swapChainInfo.imageColorSpace     = surfaceFormats.at(0).colorSpace;
         swapChainInfo.imageFormat         = surfaceFormats.at(0).format;
         swapChainInfo.imageArrayLayers    = 1u;
-        swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                   VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        swapChainInfo.imageUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     }
 
-    ThrowOnFail(vkCreateSwapchainKHR(ctx.device,
-                                     &swapChainInfo,
-                                     nullptr,
-                                     &ctx.swapchain));
+    ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain));
 
-    ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
-                                        ctx.swapchain,
-                                        &ctx.frameImageCount,
-                                        nullptr));
+    ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.frameImageCount, nullptr));
 
     // ---------------------
 
@@ -298,20 +295,16 @@ Context Aule::CreateContext(const Params& params)
 
     for (uint32_t frameIndex = 0u; frameIndex < frameCount; frameIndex++)
     {
-        VkSemaphoreCreateInfo sempahoreInfo = {
-            VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-        };
+        VkSemaphoreCreateInfo sempahoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 
-        ThrowOnFail(
-            vkCreateSemaphore(ctx.device,
-                              &sempahoreInfo,
-                              nullptr,
-                              &ctx.frameSemaphoreImageAvailable[frameIndex]));
-        ThrowOnFail(
-            vkCreateSemaphore(ctx.device,
-                              &sempahoreInfo,
-                              nullptr,
-                              &ctx.frameSemaphoreRenderComplete[frameIndex]));
+        ThrowOnFail(vkCreateSemaphore(ctx.device,
+                                      &sempahoreInfo,
+                                      nullptr,
+                                      &ctx.frameSemaphoreImageAvailable[frameIndex]));
+        ThrowOnFail(vkCreateSemaphore(ctx.device,
+                                      &sempahoreInfo,
+                                      nullptr,
+                                      &ctx.frameSemaphoreRenderComplete[frameIndex]));
 
         VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags             = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -320,9 +313,7 @@ Context Aule::CreateContext(const Params& params)
                                   nullptr,
                                   &ctx.frameFenceRenderComplete[frameIndex]));
 
-        VkCommandPoolCreateInfo commandPoolInfo = {
-            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
-        };
+        VkCommandPoolCreateInfo commandPoolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
         {
             commandPoolInfo.queueFamilyIndex = ctx.selectedQueueFamilyIndex;
         }
@@ -336,29 +327,26 @@ Context Aule::CreateContext(const Params& params)
         };
         {
             commandAllocateInfo.commandBufferCount = 1u;
-            commandAllocateInfo.commandPool = ctx.frameCommandPool[frameIndex];
+            commandAllocateInfo.commandPool        = ctx.frameCommandPool[frameIndex];
         }
-        ThrowOnFail(
-            vkAllocateCommandBuffers(ctx.device,
-                                     &commandAllocateInfo,
-                                     &ctx.frameCommandBuffer[frameIndex]));
+        ThrowOnFail(vkAllocateCommandBuffers(ctx.device,
+                                             &commandAllocateInfo,
+                                             &ctx.frameCommandBuffer[frameIndex]));
 
-        VkImageViewCreateInfo imageViewInfo = {
-            VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO
-        };
+        VkImageViewCreateInfo imageViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 
-        imageViewInfo.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewInfo.image                       = ctx.frameImages[frameIndex];
-        imageViewInfo.format                      = swapChainInfo.imageFormat;
-        imageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewInfo.image                           = ctx.frameImages[frameIndex];
+        imageViewInfo.format                          = swapChainInfo.imageFormat;
+        imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         imageViewInfo.subresourceRange.baseMipLevel   = 0u;
         imageViewInfo.subresourceRange.levelCount     = 1u;
         imageViewInfo.subresourceRange.baseArrayLayer = 0u;
         imageViewInfo.subresourceRange.layerCount     = 1u;
-        imageViewInfo.components = { VK_COMPONENT_SWIZZLE_IDENTITY,
-                                     VK_COMPONENT_SWIZZLE_IDENTITY,
-                                     VK_COMPONENT_SWIZZLE_IDENTITY,
-                                     VK_COMPONENT_SWIZZLE_IDENTITY };
+        imageViewInfo.components                      = { VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY };
 
         ThrowOnFail(vkCreateImageView(ctx.device,
                                       &imageViewInfo,
@@ -393,22 +381,21 @@ Context Aule::CreateContext(const Params& params)
 
     ImGui_ImplVulkan_InitInfo imguiInfo = {};
     {
-        imguiInfo.Instance       = ctx.instance;
-        imguiInfo.PhysicalDevice = ctx.selectedPhysicalDevice;
-        imguiInfo.Device         = ctx.device;
-        imguiInfo.QueueFamily    = ctx.selectedQueueFamilyIndex;
-        imguiInfo.Queue          = ctx.queues[ctx.selectedQueueFamilyIndex];
-        imguiInfo.MinImageCount  = ctx.frameImageCount;
-        imguiInfo.ImageCount     = ctx.frameImageCount;
+        imguiInfo.Instance            = ctx.instance;
+        imguiInfo.PhysicalDevice      = ctx.selectedPhysicalDevice;
+        imguiInfo.Device              = ctx.device;
+        imguiInfo.QueueFamily         = ctx.selectedQueueFamilyIndex;
+        imguiInfo.Queue               = ctx.queues[ctx.selectedQueueFamilyIndex];
+        imguiInfo.MinImageCount       = ctx.frameImageCount;
+        imguiInfo.ImageCount          = ctx.frameImageCount;
         imguiInfo.UseDynamicRendering = true;
         imguiInfo.DescriptorPoolSize  = params.maxSupportedImguiImages;
 
         imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType =
             VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-        imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo
-            .colorAttachmentCount = 1u;
-        imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo
-            .pColorAttachmentFormats = &swapChainInfo.imageFormat;
+        imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1u;
+        imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats =
+            &swapChainInfo.imageFormat;
     }
 
     ImGui_ImplVulkan_Init(&imguiInfo);
@@ -425,22 +412,16 @@ void Aule::DestroyContext(Context& context)
     for (auto& swapchainImageView : context.frameImageViews)
         vkDestroyImageView(context.device, swapchainImageView, nullptr);
 
-    for (uint32_t frameIndex = 0u;
-         frameIndex < context.frameCommandBuffer.size();
-         frameIndex++)
+    for (uint32_t frameIndex = 0u; frameIndex < context.frameCommandBuffer.size(); frameIndex++)
     {
-        vkDestroyCommandPool(context.device,
-                             context.frameCommandPool[frameIndex],
-                             nullptr);
+        vkDestroyCommandPool(context.device, context.frameCommandPool[frameIndex], nullptr);
         vkDestroySemaphore(context.device,
                            context.frameSemaphoreImageAvailable[frameIndex],
                            nullptr);
         vkDestroySemaphore(context.device,
                            context.frameSemaphoreRenderComplete[frameIndex],
                            nullptr);
-        vkDestroyFence(context.device,
-                       context.frameFenceRenderComplete[frameIndex],
-                       nullptr);
+        vkDestroyFence(context.device, context.frameFenceRenderComplete[frameIndex], nullptr);
     }
 
     ImGui_ImplVulkan_Shutdown();
@@ -473,35 +454,26 @@ void Aule::Dispatch(Context&                      ctx,
                         UINT64_MAX);
 
         // Reset the fence for this frame.
-        vkResetFences(ctx.device,
-                      1u,
-                      &ctx.frameFenceRenderComplete[frameIndex]);
+        vkResetFences(ctx.device, 1u, &ctx.frameFenceRenderComplete[frameIndex]);
 
         VkAcquireNextImageInfoKHR swapChainIndexAcquireInfo = {
             VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR
         };
         {
-            swapChainIndexAcquireInfo.swapchain = ctx.swapchain;
-            swapChainIndexAcquireInfo.timeout   = UINT64_MAX;
-            swapChainIndexAcquireInfo.semaphore =
-                ctx.frameSemaphoreImageAvailable[frameIndex];
+            swapChainIndexAcquireInfo.swapchain  = ctx.swapchain;
+            swapChainIndexAcquireInfo.timeout    = UINT64_MAX;
+            swapChainIndexAcquireInfo.semaphore  = ctx.frameSemaphoreImageAvailable[frameIndex];
             swapChainIndexAcquireInfo.deviceMask = 0x1;
         }
 
         uint32_t swapchainIndex;
-        ThrowOnFail(vkAcquireNextImage2KHR(ctx.device,
-                                           &swapChainIndexAcquireInfo,
-                                           &swapchainIndex));
-
-        ThrowOnFail(vkResetCommandPool(ctx.device,
-                                       ctx.frameCommandPool[frameIndex],
-                                       0x0));
-
-        VkCommandBufferBeginInfo cmdInfo = {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-        };
         ThrowOnFail(
-            vkBeginCommandBuffer(ctx.frameCommandBuffer[frameIndex], &cmdInfo));
+            vkAcquireNextImage2KHR(ctx.device, &swapChainIndexAcquireInfo, &swapchainIndex));
+
+        ThrowOnFail(vkResetCommandPool(ctx.device, ctx.frameCommandPool[frameIndex], 0x0));
+
+        VkCommandBufferBeginInfo cmdInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        ThrowOnFail(vkBeginCommandBuffer(ctx.frameCommandBuffer[frameIndex], &cmdInfo));
 
         // -----------------------
 
@@ -515,20 +487,16 @@ void Aule::Dispatch(Context&                      ctx,
 
         // -----------------------
 
-        VkImageMemoryBarrier2 imageBarrier = {
-            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2
-        };
+        VkImageMemoryBarrier2 imageBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
         {
-            imageBarrier.image     = ctx.frameImages[swapchainIndex];
-            imageBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            imageBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            imageBarrier.image         = ctx.frameImages[swapchainIndex];
+            imageBarrier.oldLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            imageBarrier.newLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
             imageBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
             imageBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-            imageBarrier.dstStageMask =
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            imageBarrier.subresourceRange.aspectMask =
-                VK_IMAGE_ASPECT_COLOR_BIT;
+            imageBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             imageBarrier.subresourceRange.layerCount = 1u;
             imageBarrier.subresourceRange.levelCount = 1u;
         }
@@ -541,15 +509,12 @@ void Aule::Dispatch(Context&                      ctx,
 
         vkCmdPipelineBarrier2(ctx.frameCommandBuffer[frameIndex], &barriers);
 
-        VkRenderingAttachmentInfo attachmentInfo = {
-            VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
-        };
+        VkRenderingAttachmentInfo attachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
         {
-            attachmentInfo.imageLayout =
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            attachmentInfo.loadOp    = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            attachmentInfo.storeOp   = VK_ATTACHMENT_STORE_OP_STORE;
-            attachmentInfo.imageView = ctx.frameImageViews[swapchainIndex];
+            attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+            attachmentInfo.imageView   = ctx.frameImageViews[swapchainIndex];
         }
 
         VkRenderingInfo renderingInfo = { VK_STRUCTURE_TYPE_RENDERING_INFO };
@@ -567,19 +532,17 @@ void Aule::Dispatch(Context&                      ctx,
             std::lock_guard _(*pDispatchQueueMutex);
 
         ImGui::Render();
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
-                                        ctx.frameCommandBuffer[frameIndex]);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), ctx.frameCommandBuffer[frameIndex]);
 
         vkCmdEndRendering(ctx.frameCommandBuffer[frameIndex]);
 
         {
-            imageBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            imageBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            imageBarrier.oldLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            imageBarrier.newLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             imageBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
             imageBarrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
-            imageBarrier.srcStageMask =
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            imageBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            imageBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
         }
         vkCmdPipelineBarrier2(ctx.frameCommandBuffer[frameIndex], &barriers);
 
@@ -587,21 +550,18 @@ void Aule::Dispatch(Context&                      ctx,
 
         ThrowOnFail(vkEndCommandBuffer(ctx.frameCommandBuffer[frameIndex]));
 
-        const VkPipelineStageFlags waitStage =
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         {
 
-            submitInfo.commandBufferCount = 1u;
-            submitInfo.pCommandBuffers    = &ctx.frameCommandBuffer[frameIndex];
-            submitInfo.waitSemaphoreCount = 1u;
-            submitInfo.pWaitSemaphores =
-                &ctx.frameSemaphoreImageAvailable[frameIndex];
+            submitInfo.commandBufferCount   = 1u;
+            submitInfo.pCommandBuffers      = &ctx.frameCommandBuffer[frameIndex];
+            submitInfo.waitSemaphoreCount   = 1u;
+            submitInfo.pWaitSemaphores      = &ctx.frameSemaphoreImageAvailable[frameIndex];
             submitInfo.pWaitDstStageMask    = &waitStage;
             submitInfo.signalSemaphoreCount = 1u;
-            submitInfo.pSignalSemaphores =
-                &ctx.frameSemaphoreRenderComplete[frameIndex];
+            submitInfo.pSignalSemaphores    = &ctx.frameSemaphoreRenderComplete[frameIndex];
         }
         ThrowOnFail(vkQueueSubmit(ctx.queues[ctx.selectedQueueFamilyIndex],
                                   1u,
@@ -614,11 +574,9 @@ void Aule::Dispatch(Context&                      ctx,
             presentInfo.pSwapchains        = &ctx.swapchain;
             presentInfo.pImageIndices      = &swapchainIndex;
             presentInfo.waitSemaphoreCount = 1u;
-            presentInfo.pWaitSemaphores =
-                &ctx.frameSemaphoreRenderComplete[frameIndex];
+            presentInfo.pWaitSemaphores    = &ctx.frameSemaphoreRenderComplete[frameIndex];
         }
-        ThrowOnFail(vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex],
-                                      &presentInfo));
+        ThrowOnFail(vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex], &presentInfo));
 
         // -----------------------
 
