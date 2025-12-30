@@ -2,17 +2,19 @@
 
 Aule is a cross-platform rapid Vulkan C++ prototyping tool. 
 
-It allows you to get quickly up and running with a cross-platform graphics runtime that draws to an operating system window, with helpful tools ready to use, like ImGui and the Vulkan Memory Allocator. 
+Aule lets you skip the process of:
+- Basic Vulkan initialization (Instance, Physical Device, Logical Device)
+- Cross-platform operating system window creation.
+- Swapchain creation and configuration for OS window.
+- Frame pacing and synchronization, swapchain presentation.
+- Configuring ImGui
+- Configuring Vulkan Memory Allocator
 
 Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. Kind of like vk-bootstrap but it assumes you want to draw to an operating system window.
 
-Just specify some initialization parameters, provide your render lambda, and you are good to go. 
-
-## Example
+## Basic Usage
 
 This image was produced on a macOS device using the C++ code sample below it. See also the Sample/ directory.
-
-<img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
 
 ```
 #include "../Include/Aule/Aule.h"
@@ -69,5 +71,9 @@ int main(int argc, char** argv)
     return 0;
 }
 ```
+
+The above code snipped was used to compile this application running on an Apple Silicon device:
+
+<img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
 
 ## Integrate
