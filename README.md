@@ -14,7 +14,7 @@ Aule is for folks who would rather work directly with the graphics API instead o
 
 ## Basic Usage
 
-This image was produced on a macOS device using the C++ code sample below it. See also the Sample/ directory.
+See the full code listing at [Sample/Main.cpp](https://github.com/parsaiej/Aule/blob/master/Sample/Main.cpp):
 
 ```
 #include "../Include/Aule/Aule.h"
