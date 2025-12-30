@@ -4,6 +4,8 @@ Simple middleware library for fast creation of a cross-platform graphics runtime
 
 ## Usage
 
+Please refer to the sample in Main.cpp, but the gist of it is:
+
 ```
 #include "../Include/Aule/Aule.h"
 
@@ -56,6 +58,9 @@ int main(int argc, char** argv)
     return 0;
 }
 ```
+
+<img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
+
 
 ## Build
 
