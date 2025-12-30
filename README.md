@@ -6,11 +6,11 @@ It allows you to get quickly up and running with a cross-platform graphics runti
 
 Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. 
 
-## Usage
+## Example
+
+This image was produced on a macOS device using the C++ code sample below it. See also the Sample/ directory.
 
 <img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
-
-The image above was produced on a macOS device with the new KosmicKrisp Vulkan drivers, using the following C++ code sample, which can also be found in the Sample/ directory.
 
 ```
 #include "../Include/Aule/Aule.h"
