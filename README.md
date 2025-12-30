@@ -1,8 +1,10 @@
 ## Aule
 
-Simple C++ middleware library for fast creation of a cross-platform graphics runtime (Vulkan), operating system window (GLFW), and user interface (ImGui). 
+Aule is a rapid Vulkan C++ prototyping tool. 
 
-This library automatically creates a render context for you with , packs them all into a render context for you to do whatever you want
+It allows you to get quickly up and running with a cross-platform graphics runtime that draws to an operating system window, with helpful tools ready to use, like ImGui and the Vulkan Memory Allocator. 
+
+Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. 
 
 ## Usage
 
@@ -27,6 +29,9 @@ int main(int argc, char** argv)
     // Use the context to create shaders, upload data, arrange descriptors...
     // ....
 
+    // Kick off the render loop. Frame pacing, queue submission, swapchain presentation, and synchronization
+    // are handled automatically. Your lambda is provided the active frame index which can be
+    // used to record work into the current command buffer and draw to the active swapchain image.
     Aule::Dispatch(context,
                    [&](uint32_t frameIndex)
                    {
@@ -62,8 +67,5 @@ int main(int argc, char** argv)
     return 0;
 }
 ```
-
-
-## Build
 
 ## Integrate
