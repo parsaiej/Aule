@@ -23,14 +23,15 @@ int main(int argc, char** argv)
         VkDependencyInfo barriers = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 
         Aule::Dispatch(context,
-                       [&](uint32_t swapchainIndex, uint32_t frameIndex)
+                       [&](uint32_t frameIndex)
                        {
-                           auto& cmd = context.frameCommandBuffer[frameIndex];
+                           auto& cmd        = context.frameCommandBuffer[frameIndex];
+                           auto& backbuffer = context.swapchainImages[frameIndex];
 
                            // -----
 
                            {
-                               barriersI[0].image                       = context.swapchainImages[swapchainIndex];
+                               barriersI[0].image                       = backbuffer;
                                barriersI[0].oldLayout                   = VK_IMAGE_LAYOUT_UNDEFINED;
                                barriersI[0].newLayout                   = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                                barriersI[0].srcAccessMask               = VK_ACCESS_2_NONE;
@@ -57,12 +58,7 @@ int main(int argc, char** argv)
 
                            VkClearColorValue clearColor = { 1, 0, 0, 0 };
 
-                           vkCmdClearColorImage(cmd,
-                                                context.swapchainImages[swapchainIndex],
-                                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                &clearColor,
-                                                1u,
-                                                &clearSubresourceRange);
+                           vkCmdClearColorImage(cmd, backbuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1u, &clearSubresourceRange);
 
                            // -----
 

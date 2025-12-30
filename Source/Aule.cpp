@@ -196,13 +196,16 @@ Context Aule::CreateContext(const Params& params)
 
     // ---------------------
 
-    ctx.frameCommandPool.resize(params.numFramesInFlight);
-    ctx.frameCommandBuffer.resize(params.numFramesInFlight);
-    ctx.frameSemaphoreImageAvailable.resize(params.numFramesInFlight);
-    ctx.frameSemaphoreRenderComplete.resize(params.numFramesInFlight);
-    ctx.frameFenceRenderComplete.resize(params.numFramesInFlight);
+    // NOTE: For simplicity of this prototyping library, frames in flight will always equal swap chain image count.
+    const auto frameCount = ctx.swapchainImageCount;
 
-    for (uint32_t frameIndex = 0u; frameIndex < params.numFramesInFlight; frameIndex++)
+    ctx.frameCommandPool.resize(frameCount);
+    ctx.frameCommandBuffer.resize(frameCount);
+    ctx.frameSemaphoreImageAvailable.resize(frameCount);
+    ctx.frameSemaphoreRenderComplete.resize(frameCount);
+    ctx.frameFenceRenderComplete.resize(frameCount);
+
+    for (uint32_t frameIndex = 0u; frameIndex < frameCount; frameIndex++)
     {
         VkSemaphoreCreateInfo sempahoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
         ThrowOnFail(vkCreateSemaphore(ctx.deviceLogical, &sempahoreInfo, nullptr, &ctx.frameSemaphoreImageAvailable[frameIndex]));
@@ -302,7 +305,7 @@ void Aule::DestroyContext(Context& context)
     glfwDestroyWindow(context.window);
 }
 
-void Aule::Dispatch(Context& ctx, std::function<void(uint32_t, uint32_t)> renderFrameCallback, std::mutex* pDispatchQueueMutex)
+void Aule::Dispatch(Context& ctx, std::function<void(uint32_t)> renderFrameCallback, std::mutex* pDispatchQueueMutex)
 {
     uint32_t frameIndex = 0u;
 
@@ -340,7 +343,7 @@ void Aule::Dispatch(Context& ctx, std::function<void(uint32_t, uint32_t)> render
 
         // -----------------------
 
-        renderFrameCallback(swapchainIndex, frameIndex);
+        renderFrameCallback(frameIndex);
 
         // -----------------------
 
