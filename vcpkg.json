@@ -1,7 +1,0 @@
-{
-    "dependencies": [
-      "volk",
-      "glfw3",
-      "vulkan-memory-allocator"
-    ]
-}
