@@ -28,6 +28,7 @@
 
 #include <functional>
 #include <vector>
+#include <unordered_map>
 
 // Volk
 // -----------------
