@@ -6,6 +6,8 @@ It allows you to get quickly up and running with a cross-platform graphics runti
 
 Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. Kind of like vk-bootstrap but it assumes you want to draw to an operating system window.
 
+Just specify some initialization parameters, provide your render lambda, and you are good to go. 
+
 ## Example
 
 This image was produced on a macOS device using the C++ code sample below it. See also the Sample/ directory.
