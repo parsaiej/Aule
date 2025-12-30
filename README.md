@@ -108,3 +108,14 @@ Aule uses the following middlewares which will be auto-pulled by CMake when you 
 - [volk](https://github.com/zeux/volk)
 - [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
 - [GLFW](https://github.com/glfw/glfw)
+
+## Internal Extensions
+
+Aule uses the following device extensions internally:
+- `VK_KHR_swapchain`
+- `VK_KHR_dynamic_rendering`
+- `VK_KHR_synchronization2`
+
+Additionally it will use the instance extensions returned by GLFW's `glfwGetRequiredInstanceExtensions`
+
+You can specify additional device extensions to load in the Aule::Params. 
