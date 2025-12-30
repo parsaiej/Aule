@@ -1,4 +1,4 @@
-## Aule
+## `Aule`
 
 Aule is a cross-platform rapid Vulkan C++ prototyping tool. 
 
@@ -76,4 +76,26 @@ The above code snipped was used to compile this application running on an Apple 
 
 <img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
 
-## Integrate
+## Setting up `Aule`
+
+The simplest way to use Aule is by adding it as a submodule to your project.
+
+`git submodule add https://github.com/parsaiej/Aule.git`
+
+Currently Aule is only supported by CMake build systems due to how the dependency resolution works. Add the following to your CMakeLists.txt
+
+`add_subdirectory(Aule)`
+
+Finally, just link with Aule.
+
+`target_link_libraries(YourProject PRIVATE Aule)`
+
+And include it.
+
+`target_include_directories(YourProject PRIVATE ${CMAKE_SOURCE_DIR}/Aule/Include)`
+
+Finally, just include the header in your cpp file:
+
+`#include <Aule/Aule.h>`
+
+Your project will inherit Aule's precompiled header which includes utility headers like ImGui and Vulkan Memory Allocator.
