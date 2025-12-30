@@ -10,7 +10,7 @@ Aule lets you skip the process of:
 - Configuring ImGui
 - Configuring Vulkan Memory Allocator
 
-Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. Kind of like vk-bootstrap but it assumes you want to draw to an operating system window.
+Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. Kind of like [vk-bootstrap](https://github.com/charles-lunarg/vk-bootstrap) but it assumes you want to draw to an operating system window, speeding things up even more.
 
 ## Basic Usage
 
