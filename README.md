@@ -82,15 +82,15 @@ The simplest way to use Aule is by adding it as a submodule to your project.
 
 `git submodule add https://github.com/parsaiej/Aule.git`
 
-Currently Aule is only supported by CMake build system due to how the dependency resolution works. Add the following to your CMakeLists.txt
+Currently Aule is only supported by CMake build system due to how the dependency resolution works. Add the following to your CMakeLists.txt:
 
 `add_subdirectory(Aule)`
 
-Finally, just link with Aule.
+Next, link with Aule:
 
 `target_link_libraries(YourProject PRIVATE Aule)`
 
-And include it.
+And include it:
 
 `target_include_directories(YourProject PRIVATE ${CMAKE_SOURCE_DIR}/Aule/Include)`
 
