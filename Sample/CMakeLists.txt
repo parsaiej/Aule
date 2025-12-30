@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.28)
 
 add_executable(AuleSample Main.cpp)
 
-# Link
+# Include
 # -----------------------
 
 target_include_directories(AuleSample PRIVATE ${CMAKE_SOURCE_DIR}/Include/)

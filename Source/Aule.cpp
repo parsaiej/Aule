@@ -1,8 +1,4 @@
 #include "../Include/Aule/Aule.h"
-#include "AulePrecompiled.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
-#include <GLFW/glfw3.h>
 
 using namespace Aule;
 
