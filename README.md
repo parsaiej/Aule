@@ -3,7 +3,7 @@
 Aule is a cross-platform rapid Vulkan C++ prototyping tool. 
 
 Aule lets you skip the process of:
-- Basic Vulkan initialization (Instance, Physical Device, Logical Device)
+- Basic Vulkan initialization (Instance, Physical Device, Logical Device, Queue Enumeration)
 - Cross-platform operating system window creation.
 - Swapchain creation and configuration for OS window.
 - Frame pacing and synchronization, swapchain presentation.
