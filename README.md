@@ -1,6 +1,6 @@
 ## Aule
 
-Aule is a rapid Vulkan C++ prototyping tool. 
+Aule is a cross-platform rapid Vulkan C++ prototyping tool. 
 
 It allows you to get quickly up and running with a cross-platform graphics runtime that draws to an operating system window, with helpful tools ready to use, like ImGui and the Vulkan Memory Allocator. 
 
