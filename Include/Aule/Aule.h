@@ -39,11 +39,9 @@ namespace Aule
         uint32_t                   swapchainImageCount;
         VkFormat                   swapchainFormat;
 
-        // Index with the `swapchainIndex` passed by the Dispatch callback.
-        std::vector<VkImage>     swapchainImages;
-        std::vector<VkImageView> swapchainImageViews;
-
         // Index with the `frameIndex` passed by the Dispatch callback.
+        std::vector<VkImage>         swapchainImages;
+        std::vector<VkImageView>     swapchainImageViews;
         std::vector<VkCommandPool>   frameCommandPool;
         std::vector<VkCommandBuffer> frameCommandBuffer;
         std::vector<VkSemaphore>     frameSemaphoreImageAvailable;
