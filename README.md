@@ -4,7 +4,7 @@ Aule is a cross-platform rapid Vulkan C++ prototyping tool.
 
 It allows you to get quickly up and running with a cross-platform graphics runtime that draws to an operating system window, with helpful tools ready to use, like ImGui and the Vulkan Memory Allocator. 
 
-Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. 
+Aule is for folks who would rather work directly with the graphics API instead of an abstraction, but want to skip all the annoying parts of getting that environment up and running. King of like vk-bootstrap but it assumes you want to draw to an operating system window.
 
 ## Example
 
