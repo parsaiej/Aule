@@ -99,3 +99,12 @@ Finally, just include the header in your cpp file:
 `#include <Aule/Aule.h>`
 
 Your project will inherit Aule's precompiled header which includes utility headers like ImGui and Vulkan Memory Allocator.
+
+
+## Dependencies
+
+Aule uses the following middlewares which will be auto-pulled by CMake when you follow the above instructions:
+- [ImGui](https://github.com/ocornut/imgui)
+- [volk](https://github.com/zeux/volk)
+- [Vulkan Memory Allocator](git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git)
+- [GLFW](git@github.com:glfw/glfw.git)
