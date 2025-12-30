@@ -6,9 +6,9 @@ This library automatically creates a render context for you with , packs them al
 
 ## Usage
 
-The image below was produced using the following code sample, which can also be found in the Sample/ directory.
-
 <img width="1274" height="747" alt="image" src="https://github.com/user-attachments/assets/7d65c6a3-701e-40aa-9690-bd108f6cb804" />
+
+The image above was produced using the following code sample, which can also be found in the Sample/ directory.
 
 ```
 #include "../Include/Aule/Aule.h"
