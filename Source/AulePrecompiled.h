@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <array>
+#include <stdexcept>
 
 // Volk
 // -----------------

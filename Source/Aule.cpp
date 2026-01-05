@@ -255,6 +255,11 @@ Context Aule::CreateContext(const Params& params)
 
     VkSwapchainCreateInfoKHR swapChainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 
+#if defined(__linux__)
+    ctx.surfaceInfo.currentExtent.width  = params.windowWidth;
+    ctx.surfaceInfo.currentExtent.height = params.windowHeight;
+#endif
+
     {
         swapChainInfo.presentMode         = VK_PRESENT_MODE_FIFO_KHR;
         swapChainInfo.surface             = ctx.surface;
