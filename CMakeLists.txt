@@ -19,6 +19,7 @@ FetchContent_Declare(volk  GIT_REPOSITORY https://github.com/zeux/volk.git      
 FetchContent_Declare(glfw  GIT_REPOSITORY https://github.com/glfw/glfw.git                                      GIT_TAG 3.4)
 FetchContent_Declare(vma   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git GIT_TAG v3.3.0)
 FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git                                  GIT_TAG v1.92.5)
+FetchContent_Declare(glm   GIT_REPOSITORY https://github.com/g-truc/glm.git                                     GIT_TAG 1.0.3)
 
 set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "")
 set(GLFW_BUILD_TESTS    OFF CACHE INTERNAL "")
@@ -27,7 +28,7 @@ set(GLFW_INSTALL        OFF CACHE INTERNAL "")
 set(GLFW_BUILD_X11      ON  CACHE BOOL     "")
 set(GLFW_BUILD_WAYLAND  ON  CACHE BOOL     "")
 
-FetchContent_MakeAvailable(volk glfw vma imgui)
+FetchContent_MakeAvailable(volk glfw vma imgui glm)
 
 # ImGui:
 # Needs to be compiled in a way that isn't vendored by vcpkg, so 
@@ -75,6 +76,7 @@ target_link_libraries(Aule
         volk::volk 
         glfw
         GPUOpen::VulkanMemoryAllocator
+        glm
 )
 
 # Compile flags

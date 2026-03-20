@@ -55,4 +55,9 @@
 #include <imgui_impl_vulkan.h>
 #include <imgui.h>
 
+// GLM
+// -----------------
+
+#include <glm/glm.hpp>
+
 #endif
