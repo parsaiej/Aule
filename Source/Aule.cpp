@@ -45,6 +45,12 @@ Context Aule::CreateContext(const Params& params)
 
     // ----------------------------------
 
+#ifdef __linux__
+    // X11 is better than Wayland in this case due to better RADV tracing support.
+    // And also a weird bug in imgui scaling that I am too lazy to fix at the moment.
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+
     ThrowOnFail(glfwInit());
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
