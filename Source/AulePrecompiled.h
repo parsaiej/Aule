@@ -32,6 +32,7 @@
 #include <mutex>
 #include <array>
 #include <stdexcept>
+#include <deque>
 
 // Volk
 // -----------------

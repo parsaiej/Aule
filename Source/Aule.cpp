@@ -298,6 +298,7 @@ Context Aule::CreateContext(const Params& params)
     ctx.frameSemaphoreImageAvailable.resize(frameCount);
     ctx.frameSemaphoreRenderComplete.resize(frameCount);
     ctx.frameFenceRenderComplete.resize(frameCount);
+    ctx.frameDeletionQueues.resize(frameCount);
 
     ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
                                         ctx.swapchain,
@@ -463,6 +464,19 @@ void Aule::Dispatch(Context&                      ctx,
                         &ctx.frameFenceRenderComplete[frameIndex],
                         VK_TRUE,
                         UINT64_MAX);
+
+        // Process deletion queue.
+        {
+            auto& frameDeletionQueue = ctx.frameDeletionQueues[frameIndex];
+
+            while (!frameDeletionQueue.empty())
+            {
+                // Execute the stored lambda (e.g., vkDestroyBuffer)
+                frameDeletionQueue.front()();
+
+                frameDeletionQueue.pop_front();
+            }
+        }
 
         // Reset the fence for this frame.
         vkResetFences(ctx.device, 1u, &ctx.frameFenceRenderComplete[frameIndex]);

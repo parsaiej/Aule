@@ -78,14 +78,15 @@ namespace Aule
         VkSwapchainKHR           swapchain;
 
         // Index with the `frameIndex` passed by the Dispatch callback.
-        uint32_t                     frameImageCount;
-        std::vector<VkImage>         frameImages;
-        std::vector<VkImageView>     frameImageViews;
-        std::vector<VkCommandPool>   frameCommandPool;
-        std::vector<VkCommandBuffer> frameCommandBuffer;
-        std::vector<VkSemaphore>     frameSemaphoreImageAvailable;
-        std::vector<VkSemaphore>     frameSemaphoreRenderComplete;
-        std::vector<VkFence>         frameFenceRenderComplete;
+        uint32_t                                       frameImageCount;
+        std::vector<VkImage>                           frameImages;
+        std::vector<VkImageView>                       frameImageViews;
+        std::vector<VkCommandPool>                     frameCommandPool;
+        std::vector<VkCommandBuffer>                   frameCommandBuffer;
+        std::vector<VkSemaphore>                       frameSemaphoreImageAvailable;
+        std::vector<VkSemaphore>                       frameSemaphoreRenderComplete;
+        std::vector<VkFence>                           frameFenceRenderComplete;
+        std::vector<std::deque<std::function<void()>>> frameDeletionQueues;
     };
 
     // Create's an operating system window and Vulkan runtime, with a linking
