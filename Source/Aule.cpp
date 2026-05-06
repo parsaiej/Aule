@@ -211,16 +211,20 @@ Context Aule::CreateContext(const Params& params)
     VkPhysicalDeviceFeatures2                features                = {};
     VkPhysicalDeviceSynchronization2Features featureSync2            = {};
     VkPhysicalDeviceDynamicRenderingFeatures featureDynamicRendering = {};
+    VkPhysicalDeviceScalarBlockLayoutFeatures featureScalarLayout    = {};
 
     features.sType                = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     featureSync2.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
     featureDynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    featureScalarLayout.sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
 
-    features.pNext     = &featureSync2;
-    featureSync2.pNext = &featureDynamicRendering;
+    features.pNext                = &featureSync2;
+    featureSync2.pNext            = &featureDynamicRendering;
+    featureDynamicRendering.pNext = &featureScalarLayout;
 
     featureSync2.synchronization2            = VK_TRUE;
     featureDynamicRendering.dynamicRendering = VK_TRUE;
+    featureScalarLayout.scalarBlockLayout    = VK_TRUE;
 
     deviceInfo.pNext                   = &features;
     deviceInfo.queueCreateInfoCount    = queueCreateInfos.size();
