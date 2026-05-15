@@ -283,72 +283,34 @@ Context Aule::CreateContext(const Params& params)
 
     ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain));
 
-    ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.frameImageCount, nullptr));
+    ThrowOnFail(
+        vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.swapchainImageCount, nullptr));
 
     // ---------------------
+    // Per-swapchain-image resources (sized by driver-decided image count).
+    // ---------------------
 
-    // NOTE: For simplicity of this prototyping library, frames in flight will
-    // always equal swap chain image count.
-    const auto frameCount = ctx.frameImageCount;
-
-    ctx.frameImages.resize(frameCount);
-    ctx.frameImageViews.resize(frameCount);
-    ctx.frameCommandPool.resize(frameCount);
-    ctx.frameCommandBuffer.resize(frameCount);
-    ctx.frameSemaphoreImageAvailable.resize(frameCount);
-    ctx.frameSemaphoreRenderComplete.resize(frameCount);
-    ctx.frameFenceRenderComplete.resize(frameCount);
-    ctx.frameDeletionQueues.resize(frameCount);
+    ctx.swapchainImages.resize(ctx.swapchainImageCount);
+    ctx.swapchainImageViews.resize(ctx.swapchainImageCount);
+    ctx.swapchainSemaphoreRenderComplete.resize(ctx.swapchainImageCount);
 
     ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
                                         ctx.swapchain,
-                                        &ctx.frameImageCount,
-                                        ctx.frameImages.data()));
+                                        &ctx.swapchainImageCount,
+                                        ctx.swapchainImages.data()));
 
-    for (uint32_t frameIndex = 0u; frameIndex < frameCount; frameIndex++)
+    for (uint32_t imageIndex = 0u; imageIndex < ctx.swapchainImageCount; imageIndex++)
     {
-        VkSemaphoreCreateInfo sempahoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-
+        VkSemaphoreCreateInfo semaphoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
         ThrowOnFail(vkCreateSemaphore(ctx.device,
-                                      &sempahoreInfo,
+                                      &semaphoreInfo,
                                       nullptr,
-                                      &ctx.frameSemaphoreImageAvailable[frameIndex]));
-        ThrowOnFail(vkCreateSemaphore(ctx.device,
-                                      &sempahoreInfo,
-                                      nullptr,
-                                      &ctx.frameSemaphoreRenderComplete[frameIndex]));
-
-        VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-        fenceInfo.flags             = VK_FENCE_CREATE_SIGNALED_BIT;
-        ThrowOnFail(vkCreateFence(ctx.device,
-                                  &fenceInfo,
-                                  nullptr,
-                                  &ctx.frameFenceRenderComplete[frameIndex]));
-
-        VkCommandPoolCreateInfo commandPoolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-        {
-            commandPoolInfo.queueFamilyIndex = ctx.selectedQueueFamilyIndex;
-        }
-        ThrowOnFail(vkCreateCommandPool(ctx.device,
-                                        &commandPoolInfo,
-                                        nullptr,
-                                        &ctx.frameCommandPool[frameIndex]));
-
-        VkCommandBufferAllocateInfo commandAllocateInfo = {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
-        };
-        {
-            commandAllocateInfo.commandBufferCount = 1u;
-            commandAllocateInfo.commandPool        = ctx.frameCommandPool[frameIndex];
-        }
-        ThrowOnFail(vkAllocateCommandBuffers(ctx.device,
-                                             &commandAllocateInfo,
-                                             &ctx.frameCommandBuffer[frameIndex]));
+                                      &ctx.swapchainSemaphoreRenderComplete[imageIndex]));
 
         VkImageViewCreateInfo imageViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 
         imageViewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewInfo.image                           = ctx.frameImages[frameIndex];
+        imageViewInfo.image                           = ctx.swapchainImages[imageIndex];
         imageViewInfo.format                          = swapChainInfo.imageFormat;
         imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
         imageViewInfo.subresourceRange.baseMipLevel   = 0u;
@@ -363,7 +325,53 @@ Context Aule::CreateContext(const Params& params)
         ThrowOnFail(vkCreateImageView(ctx.device,
                                       &imageViewInfo,
                                       nullptr,
-                                      &ctx.frameImageViews[frameIndex]));
+                                      &ctx.swapchainImageViews[imageIndex]));
+    }
+
+    // ---------------------
+    // Per-frame-in-flight resources (sized by application choice).
+    // ---------------------
+
+    ctx.framesInFlight = params.framesInFlight;
+    assert(ctx.framesInFlight > 0u);
+
+    ctx.frameCommandPool.resize(ctx.framesInFlight);
+    ctx.frameCommandBuffer.resize(ctx.framesInFlight);
+    ctx.frameSemaphoreImageAvailable.resize(ctx.framesInFlight);
+    ctx.frameFenceRenderComplete.resize(ctx.framesInFlight);
+    ctx.frameDeletionQueues.resize(ctx.framesInFlight);
+
+    for (uint32_t frameInFlightIndex = 0u; frameInFlightIndex < ctx.framesInFlight;
+         frameInFlightIndex++)
+    {
+        VkSemaphoreCreateInfo semaphoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        ThrowOnFail(vkCreateSemaphore(ctx.device,
+                                      &semaphoreInfo,
+                                      nullptr,
+                                      &ctx.frameSemaphoreImageAvailable[frameInFlightIndex]));
+
+        VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        fenceInfo.flags             = VK_FENCE_CREATE_SIGNALED_BIT;
+        ThrowOnFail(vkCreateFence(ctx.device,
+                                  &fenceInfo,
+                                  nullptr,
+                                  &ctx.frameFenceRenderComplete[frameInFlightIndex]));
+
+        VkCommandPoolCreateInfo commandPoolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+        commandPoolInfo.queueFamilyIndex        = ctx.selectedQueueFamilyIndex;
+        ThrowOnFail(vkCreateCommandPool(ctx.device,
+                                        &commandPoolInfo,
+                                        nullptr,
+                                        &ctx.frameCommandPool[frameInFlightIndex]));
+
+        VkCommandBufferAllocateInfo commandAllocateInfo = {
+            VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
+        };
+        commandAllocateInfo.commandBufferCount = 1u;
+        commandAllocateInfo.commandPool        = ctx.frameCommandPool[frameInFlightIndex];
+        ThrowOnFail(vkAllocateCommandBuffers(ctx.device,
+                                             &commandAllocateInfo,
+                                             &ctx.frameCommandBuffer[frameInFlightIndex]));
     }
 
     // Memory Allocator
@@ -398,8 +406,8 @@ Context Aule::CreateContext(const Params& params)
         imguiInfo.Device              = ctx.device;
         imguiInfo.QueueFamily         = ctx.selectedQueueFamilyIndex;
         imguiInfo.Queue               = ctx.queues[ctx.selectedQueueFamilyIndex];
-        imguiInfo.MinImageCount       = ctx.frameImageCount;
-        imguiInfo.ImageCount          = ctx.frameImageCount;
+        imguiInfo.MinImageCount       = ctx.swapchainImageCount;
+        imguiInfo.ImageCount          = ctx.swapchainImageCount;
         imguiInfo.UseDynamicRendering = true;
         imguiInfo.DescriptorPoolSize  = params.maxSupportedImguiImages;
 
@@ -421,19 +429,19 @@ void Aule::DestroyContext(Context& context)
 {
     vkDeviceWaitIdle(context.device);
 
-    for (auto& swapchainImageView : context.frameImageViews)
-        vkDestroyImageView(context.device, swapchainImageView, nullptr);
+    // Per-swapchain-image resources.
+    for (auto& view : context.swapchainImageViews)
+        vkDestroyImageView(context.device, view, nullptr);
 
-    for (uint32_t frameIndex = 0u; frameIndex < context.frameCommandBuffer.size(); frameIndex++)
+    for (auto& sem : context.swapchainSemaphoreRenderComplete)
+        vkDestroySemaphore(context.device, sem, nullptr);
+
+    // Per-frame-in-flight resources.
+    for (uint32_t i = 0u; i < context.framesInFlight; i++)
     {
-        vkDestroyCommandPool(context.device, context.frameCommandPool[frameIndex], nullptr);
-        vkDestroySemaphore(context.device,
-                           context.frameSemaphoreImageAvailable[frameIndex],
-                           nullptr);
-        vkDestroySemaphore(context.device,
-                           context.frameSemaphoreRenderComplete[frameIndex],
-                           nullptr);
-        vkDestroyFence(context.device, context.frameFenceRenderComplete[frameIndex], nullptr);
+        vkDestroyCommandPool(context.device, context.frameCommandPool[i], nullptr);
+        vkDestroySemaphore(context.device, context.frameSemaphoreImageAvailable[i], nullptr);
+        vkDestroyFence(context.device, context.frameFenceRenderComplete[i], nullptr);
     }
 
     ImGui_ImplVulkan_Shutdown();
@@ -448,26 +456,26 @@ void Aule::DestroyContext(Context& context)
     glfwDestroyWindow(context.window);
 }
 
-void Aule::Dispatch(Context&                      ctx,
-                    std::function<void(uint32_t)> renderFrameCallback,
-                    std::mutex*                   pDispatchQueueMutex)
+void Aule::Dispatch(Context&                                ctx,
+                    std::function<void(uint32_t, uint32_t)> renderFrameCallback,
+                    std::mutex*                             pDispatchQueueMutex)
 {
-    uint32_t frameIndex = 0u;
+    uint32_t frameInFlightIndex = 0u;
 
     while (!glfwWindowShouldClose(ctx.window))
     {
         glfwPollEvents();
 
-        // Pause thread until graphics queue finished processing.
+        // Pause thread until graphics queue finished processing this frame-in-flight slot.
         vkWaitForFences(ctx.device,
                         1u,
-                        &ctx.frameFenceRenderComplete[frameIndex],
+                        &ctx.frameFenceRenderComplete[frameInFlightIndex],
                         VK_TRUE,
                         UINT64_MAX);
 
-        // Process deletion queue.
+        // Process deletion queue for this frame-in-flight slot.
         {
-            auto& frameDeletionQueue = ctx.frameDeletionQueues[frameIndex];
+            auto& frameDeletionQueue = ctx.frameDeletionQueues[frameInFlightIndex];
 
             while (!frameDeletionQueue.empty())
             {
@@ -478,16 +486,17 @@ void Aule::Dispatch(Context&                      ctx,
             }
         }
 
-        // Reset the fence for this frame.
-        vkResetFences(ctx.device, 1u, &ctx.frameFenceRenderComplete[frameIndex]);
+        // Reset the fence for this frame-in-flight slot.
+        vkResetFences(ctx.device, 1u, &ctx.frameFenceRenderComplete[frameInFlightIndex]);
 
         VkAcquireNextImageInfoKHR swapChainIndexAcquireInfo = {
             VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR
         };
         {
-            swapChainIndexAcquireInfo.swapchain  = ctx.swapchain;
-            swapChainIndexAcquireInfo.timeout    = UINT64_MAX;
-            swapChainIndexAcquireInfo.semaphore  = ctx.frameSemaphoreImageAvailable[frameIndex];
+            swapChainIndexAcquireInfo.swapchain = ctx.swapchain;
+            swapChainIndexAcquireInfo.timeout   = UINT64_MAX;
+            swapChainIndexAcquireInfo.semaphore =
+                ctx.frameSemaphoreImageAvailable[frameInFlightIndex];
             swapChainIndexAcquireInfo.deviceMask = 0x1;
         }
 
@@ -495,10 +504,12 @@ void Aule::Dispatch(Context&                      ctx,
         ThrowOnFail(
             vkAcquireNextImage2KHR(ctx.device, &swapChainIndexAcquireInfo, &swapchainIndex));
 
-        ThrowOnFail(vkResetCommandPool(ctx.device, ctx.frameCommandPool[frameIndex], 0x0));
+        auto& cmd = ctx.frameCommandBuffer[frameInFlightIndex];
+
+        ThrowOnFail(vkResetCommandPool(ctx.device, ctx.frameCommandPool[frameInFlightIndex], 0x0));
 
         VkCommandBufferBeginInfo cmdInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        ThrowOnFail(vkBeginCommandBuffer(ctx.frameCommandBuffer[frameIndex], &cmdInfo));
+        ThrowOnFail(vkBeginCommandBuffer(cmd, &cmdInfo));
 
         // -----------------------
 
@@ -508,13 +519,13 @@ void Aule::Dispatch(Context&                      ctx,
 
         // -----------------------
 
-        renderFrameCallback(frameIndex);
+        renderFrameCallback(frameInFlightIndex, swapchainIndex);
 
         // -----------------------
 
         VkImageMemoryBarrier2 imageBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
         {
-            imageBarrier.image         = ctx.frameImages[swapchainIndex];
+            imageBarrier.image         = ctx.swapchainImages[swapchainIndex];
             imageBarrier.oldLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             imageBarrier.newLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
@@ -532,14 +543,14 @@ void Aule::Dispatch(Context&                      ctx,
             barriers.pImageMemoryBarriers    = &imageBarrier;
         }
 
-        vkCmdPipelineBarrier2(ctx.frameCommandBuffer[frameIndex], &barriers);
+        vkCmdPipelineBarrier2(cmd, &barriers);
 
         VkRenderingAttachmentInfo attachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
         {
             attachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             attachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             attachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-            attachmentInfo.imageView   = ctx.frameImageViews[swapchainIndex];
+            attachmentInfo.imageView   = ctx.swapchainImageViews[swapchainIndex];
         }
 
         VkRenderingInfo renderingInfo = { VK_STRUCTURE_TYPE_RENDERING_INFO };
@@ -549,7 +560,7 @@ void Aule::Dispatch(Context&                      ctx,
             renderingInfo.layerCount           = 1u;
             renderingInfo.renderArea.extent    = ctx.surfaceInfo.currentExtent;
         }
-        vkCmdBeginRendering(ctx.frameCommandBuffer[frameIndex], &renderingInfo);
+        vkCmdBeginRendering(cmd, &renderingInfo);
 
         // If the user provided a mutex, lock it here and now (ImGui may do some
         // internal queue submissions).
@@ -557,9 +568,9 @@ void Aule::Dispatch(Context&                      ctx,
             std::lock_guard _(*pDispatchQueueMutex);
 
         ImGui::Render();
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), ctx.frameCommandBuffer[frameIndex]);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
-        vkCmdEndRendering(ctx.frameCommandBuffer[frameIndex]);
+        vkCmdEndRendering(cmd);
 
         {
             imageBarrier.oldLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -569,32 +580,31 @@ void Aule::Dispatch(Context&                      ctx,
             imageBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             imageBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
         }
-        vkCmdPipelineBarrier2(ctx.frameCommandBuffer[frameIndex], &barriers);
+        vkCmdPipelineBarrier2(cmd, &barriers);
 
         // -----------------------
 
-        ThrowOnFail(vkEndCommandBuffer(ctx.frameCommandBuffer[frameIndex]));
+        ThrowOnFail(vkEndCommandBuffer(cmd));
 
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         {
-
             submitInfo.commandBufferCount   = 1u;
-            submitInfo.pCommandBuffers      = &ctx.frameCommandBuffer[frameIndex];
+            submitInfo.pCommandBuffers      = &cmd;
             submitInfo.waitSemaphoreCount   = 1u;
-            submitInfo.pWaitSemaphores      = &ctx.frameSemaphoreImageAvailable[frameIndex];
+            submitInfo.pWaitSemaphores      = &ctx.frameSemaphoreImageAvailable[frameInFlightIndex];
             submitInfo.pWaitDstStageMask    = &waitStage;
             submitInfo.signalSemaphoreCount = 1u;
             // Indexed by swapchainIndex: this semaphore is waited on by
             // vkQueuePresentKHR against a specific swapchain image, so its
             // lifetime is tied to the image, not the frame-in-flight slot.
-            submitInfo.pSignalSemaphores    = &ctx.frameSemaphoreRenderComplete[swapchainIndex];
+            submitInfo.pSignalSemaphores = &ctx.swapchainSemaphoreRenderComplete[swapchainIndex];
         }
         ThrowOnFail(vkQueueSubmit(ctx.queues[ctx.selectedQueueFamilyIndex],
                                   1u,
                                   &submitInfo,
-                                  ctx.frameFenceRenderComplete[frameIndex]));
+                                  ctx.frameFenceRenderComplete[frameInFlightIndex]));
 
         VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
         {
@@ -602,12 +612,12 @@ void Aule::Dispatch(Context&                      ctx,
             presentInfo.pSwapchains        = &ctx.swapchain;
             presentInfo.pImageIndices      = &swapchainIndex;
             presentInfo.waitSemaphoreCount = 1u;
-            presentInfo.pWaitSemaphores    = &ctx.frameSemaphoreRenderComplete[swapchainIndex];
+            presentInfo.pWaitSemaphores    = &ctx.swapchainSemaphoreRenderComplete[swapchainIndex];
         }
         ThrowOnFail(vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex], &presentInfo));
 
         // -----------------------
 
-        frameIndex = (frameIndex + 1u) % ctx.frameCommandBuffer.size();
+        frameInFlightIndex = (frameInFlightIndex + 1u) % ctx.framesInFlight;
     }
 }

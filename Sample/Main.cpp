@@ -47,10 +47,10 @@ int main(int argc, char** argv)
         VkDependencyInfo barriers = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 
         Aule::Dispatch(context,
-                       [&](uint32_t frameIndex)
+                       [&](uint32_t frameInFlightIndex, uint32_t swapchainIndex)
                        {
-                           auto& cmd        = context.frameCommandBuffer[frameIndex];
-                           auto& backbuffer = context.frameImages[frameIndex];
+                           auto& cmd        = context.frameCommandBuffer[frameInFlightIndex];
+                           auto& backbuffer = context.swapchainImages[swapchainIndex];
 
                            // -----
 

@@ -23,9 +23,10 @@ int main(int argc, char** argv)
 {
     Aule::Params params = {};
     {
-        params.windowName   = "Aule Sample";
-        params.windowWidth  = 1280u;
-        params.windowHeight = 720u;
+        params.windowName     = "Aule Sample";
+        params.windowWidth    = 1280u;
+        params.windowHeight   = 720u;
+        params.framesInFlight = 2u; // optional; default is 2
     }
 
     auto context = Aule::CreateContext(params);
@@ -34,13 +35,16 @@ int main(int argc, char** argv)
     // ....
 
     // Kick off the render loop. Frame pacing, queue submission, swapchain presentation, and synchronization
-    // are handled automatically. Your lambda is provided the active frame index which can be
-    // used to record work into the current command buffer and draw to the active swapchain image.
+    // are handled automatically. Your lambda is provided two indices:
+    //   - frameInFlightIndex: index into per-frame-in-flight resources
+    //     (frameCommandBuffer, frameDeletionQueues, your own ring buffers).
+    //   - swapchainIndex:     index into per-swapchain-image resources
+    //     (swapchainImages, swapchainImageViews).
     Aule::Dispatch(context,
-                   [&](uint32_t frameIndex)
+                   [&](uint32_t frameInFlightIndex, uint32_t swapchainIndex)
                    {
-                       auto& cmd = context.frameCommandBuffer[frameIndex];
-                       auto& buf = context.swapchainImages[frameIndex];
+                       auto& cmd = context.frameCommandBuffer[frameInFlightIndex];
+                       auto& buf = context.swapchainImages[swapchainIndex];
 
                        // Barriers ...
 
