@@ -32,6 +32,142 @@ inline void ThrowOnFail(bool succeeded)
 
 inline void ThrowOnFail(VkResult result) { ThrowOnFail(result == VK_SUCCESS); }
 
+// -----------------------
+// Swapchain lifecycle helpers
+//
+// These manage all per-swapchain-image resources together. They are called
+// from CreateContext / DestroyContext, and from RecreateSwapchain on resize.
+// They assume the device, surface, and selectedSurfaceFormat are already set.
+// -----------------------
+
+static void CreateSwapchainAndPerImageResources(Context& ctx)
+{
+    ThrowOnFail(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.selectedPhysicalDevice,
+                                                          ctx.surface,
+                                                          &ctx.surfaceInfo));
+
+    VkExtent2D extent = ctx.surfaceInfo.currentExtent;
+
+#if defined(__linux__)
+    // Some Linux compositors report (0,0) or stale extents; trust GLFW instead.
+    {
+        int w = 0, h = 0;
+        glfwGetFramebufferSize(ctx.window, &w, &h);
+        extent.width                  = static_cast<uint32_t>(w);
+        extent.height                 = static_cast<uint32_t>(h);
+        ctx.surfaceInfo.currentExtent = extent;
+    }
+#endif
+
+    VkSwapchainCreateInfoKHR swapChainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+    {
+        swapChainInfo.presentMode         = VK_PRESENT_MODE_FIFO_KHR;
+        swapChainInfo.surface             = ctx.surface;
+        swapChainInfo.minImageCount       = ctx.surfaceInfo.minImageCount;
+        swapChainInfo.imageExtent         = extent;
+        swapChainInfo.preTransform        = ctx.surfaceInfo.currentTransform;
+        swapChainInfo.pQueueFamilyIndices = &ctx.selectedQueueFamilyIndex;
+        swapChainInfo.imageColorSpace     = ctx.selectedSurfaceFormat.colorSpace;
+        swapChainInfo.imageFormat         = ctx.selectedSurfaceFormat.format;
+        swapChainInfo.imageArrayLayers    = 1u;
+        swapChainInfo.imageUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    }
+
+    ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain));
+
+    ThrowOnFail(
+        vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.swapchainImageCount, nullptr));
+
+    ctx.swapchainImages.resize(ctx.swapchainImageCount);
+    ctx.swapchainImageViews.resize(ctx.swapchainImageCount);
+    ctx.swapchainSemaphoreRenderComplete.resize(ctx.swapchainImageCount);
+
+    ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
+                                        ctx.swapchain,
+                                        &ctx.swapchainImageCount,
+                                        ctx.swapchainImages.data()));
+
+    for (uint32_t imageIndex = 0u; imageIndex < ctx.swapchainImageCount; imageIndex++)
+    {
+        VkSemaphoreCreateInfo semaphoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+        ThrowOnFail(vkCreateSemaphore(ctx.device,
+                                      &semaphoreInfo,
+                                      nullptr,
+                                      &ctx.swapchainSemaphoreRenderComplete[imageIndex]));
+
+        VkImageViewCreateInfo imageViewInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        imageViewInfo.viewType                      = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewInfo.image                         = ctx.swapchainImages[imageIndex];
+        imageViewInfo.format                        = ctx.selectedSurfaceFormat.format;
+        imageViewInfo.subresourceRange.aspectMask   = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageViewInfo.subresourceRange.baseMipLevel = 0u;
+        imageViewInfo.subresourceRange.levelCount   = 1u;
+        imageViewInfo.subresourceRange.baseArrayLayer = 0u;
+        imageViewInfo.subresourceRange.layerCount     = 1u;
+        imageViewInfo.components                      = { VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                          VK_COMPONENT_SWIZZLE_IDENTITY };
+        ThrowOnFail(vkCreateImageView(ctx.device,
+                                      &imageViewInfo,
+                                      nullptr,
+                                      &ctx.swapchainImageViews[imageIndex]));
+    }
+}
+
+// Caller must ensure no GPU work is using these resources (vkDeviceWaitIdle).
+static void DestroySwapchainAndPerImageResources(Context& ctx)
+{
+    for (auto& view : ctx.swapchainImageViews)
+        vkDestroyImageView(ctx.device, view, nullptr);
+
+    for (auto& sem : ctx.swapchainSemaphoreRenderComplete)
+        vkDestroySemaphore(ctx.device, sem, nullptr);
+
+    if (ctx.swapchain != VK_NULL_HANDLE)
+        vkDestroySwapchainKHR(ctx.device, ctx.swapchain, nullptr);
+
+    ctx.swapchainImages.clear();
+    ctx.swapchainImageViews.clear();
+    ctx.swapchainSemaphoreRenderComplete.clear();
+    ctx.swapchain           = VK_NULL_HANDLE;
+    ctx.swapchainImageCount = 0u;
+}
+
+// Tear down the old swapchain and rebuild at the current window size. Also
+// parks on glfwWaitEvents while the window is minimized (extent 0x0) so we
+// don't create a zero-sized swapchain.
+static void RecreateSwapchain(Context& ctx)
+{
+    // Park while minimized.
+    int w = 0, h = 0;
+
+    glfwGetFramebufferSize(ctx.window, &w, &h);
+
+    while (w == 0 || h == 0)
+    {
+        glfwWaitEvents();
+
+        glfwGetFramebufferSize(ctx.window, &w, &h);
+
+        if (glfwWindowShouldClose(ctx.window))
+            return;
+    }
+
+    vkDeviceWaitIdle(ctx.device);
+
+    const uint32_t oldImageCount = ctx.swapchainImageCount;
+
+    DestroySwapchainAndPerImageResources(ctx);
+    CreateSwapchainAndPerImageResources(ctx);
+
+    // If the image count changed, ImGui's Vulkan backend needs to know.
+    if (ctx.swapchainImageCount != oldImageCount)
+        ImGui_ImplVulkan_SetMinImageCount(ctx.swapchainImageCount);
+}
+
 // Implementation
 // -----------------------
 
@@ -255,78 +391,12 @@ Context Aule::CreateContext(const Params& params)
                                                      ctx.surface,
                                                      &surfaceFormatCount,
                                                      surfaceFormats.data()));
-    ThrowOnFail(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.selectedPhysicalDevice,
-                                                          ctx.surface,
-                                                          &ctx.surfaceInfo));
 
-    VkSwapchainCreateInfoKHR swapChainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+    // Stash the chosen format so swapchain recreation on resize uses the same
+    // format/colorspace. (TODO: smarter selection — prefer B8G8R8A8 sRGB.)
+    ctx.selectedSurfaceFormat = surfaceFormats.at(0);
 
-#if defined(__linux__)
-    ctx.surfaceInfo.currentExtent.width  = params.windowWidth;
-    ctx.surfaceInfo.currentExtent.height = params.windowHeight;
-#endif
-
-    {
-        swapChainInfo.presentMode         = VK_PRESENT_MODE_FIFO_KHR;
-        swapChainInfo.surface             = ctx.surface;
-        swapChainInfo.minImageCount       = ctx.surfaceInfo.minImageCount;
-        swapChainInfo.imageExtent         = ctx.surfaceInfo.currentExtent;
-        swapChainInfo.preTransform        = ctx.surfaceInfo.currentTransform;
-        swapChainInfo.pQueueFamilyIndices = &ctx.selectedQueueFamilyIndex;
-        swapChainInfo.imageColorSpace     = surfaceFormats.at(0).colorSpace;
-        swapChainInfo.imageFormat         = surfaceFormats.at(0).format;
-        swapChainInfo.imageArrayLayers    = 1u;
-        swapChainInfo.imageUsage =
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    }
-
-    ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain));
-
-    ThrowOnFail(
-        vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.swapchainImageCount, nullptr));
-
-    // ---------------------
-    // Per-swapchain-image resources (sized by driver-decided image count).
-    // ---------------------
-
-    ctx.swapchainImages.resize(ctx.swapchainImageCount);
-    ctx.swapchainImageViews.resize(ctx.swapchainImageCount);
-    ctx.swapchainSemaphoreRenderComplete.resize(ctx.swapchainImageCount);
-
-    ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
-                                        ctx.swapchain,
-                                        &ctx.swapchainImageCount,
-                                        ctx.swapchainImages.data()));
-
-    for (uint32_t imageIndex = 0u; imageIndex < ctx.swapchainImageCount; imageIndex++)
-    {
-        VkSemaphoreCreateInfo semaphoreInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        ThrowOnFail(vkCreateSemaphore(ctx.device,
-                                      &semaphoreInfo,
-                                      nullptr,
-                                      &ctx.swapchainSemaphoreRenderComplete[imageIndex]));
-
-        VkImageViewCreateInfo imageViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-
-        imageViewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewInfo.image                           = ctx.swapchainImages[imageIndex];
-        imageViewInfo.format                          = swapChainInfo.imageFormat;
-        imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageViewInfo.subresourceRange.baseMipLevel   = 0u;
-        imageViewInfo.subresourceRange.levelCount     = 1u;
-        imageViewInfo.subresourceRange.baseArrayLayer = 0u;
-        imageViewInfo.subresourceRange.layerCount     = 1u;
-        imageViewInfo.components                      = { VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                          VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                          VK_COMPONENT_SWIZZLE_IDENTITY };
-
-        ThrowOnFail(vkCreateImageView(ctx.device,
-                                      &imageViewInfo,
-                                      nullptr,
-                                      &ctx.swapchainImageViews[imageIndex]));
-    }
+    CreateSwapchainAndPerImageResources(ctx);
 
     // ---------------------
     // Per-frame-in-flight resources (sized by application choice).
@@ -415,7 +485,7 @@ Context Aule::CreateContext(const Params& params)
             VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
         imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1u;
         imguiInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats =
-            &swapChainInfo.imageFormat;
+            &ctx.selectedSurfaceFormat.format;
     }
 
     ImGui_ImplVulkan_Init(&imguiInfo);
@@ -429,12 +499,8 @@ void Aule::DestroyContext(Context& context)
 {
     vkDeviceWaitIdle(context.device);
 
-    // Per-swapchain-image resources.
-    for (auto& view : context.swapchainImageViews)
-        vkDestroyImageView(context.device, view, nullptr);
-
-    for (auto& sem : context.swapchainSemaphoreRenderComplete)
-        vkDestroySemaphore(context.device, sem, nullptr);
+    // Per-swapchain-image resources (incl. swapchain itself).
+    DestroySwapchainAndPerImageResources(context);
 
     // Per-frame-in-flight resources.
     for (uint32_t i = 0u; i < context.framesInFlight; i++)
@@ -447,7 +513,6 @@ void Aule::DestroyContext(Context& context)
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
 
-    vkDestroySwapchainKHR(context.device, context.swapchain, nullptr);
     vkDestroySurfaceKHR(context.instance, context.surface, nullptr);
     vmaDestroyAllocator(context.allocator);
     vkDestroyDevice(context.device, nullptr);
@@ -500,9 +565,27 @@ void Aule::Dispatch(Context&                                ctx,
             swapChainIndexAcquireInfo.deviceMask = 0x1;
         }
 
-        uint32_t swapchainIndex;
-        ThrowOnFail(
-            vkAcquireNextImage2KHR(ctx.device, &swapChainIndexAcquireInfo, &swapchainIndex));
+        uint32_t       swapchainIndex;
+        const VkResult acquireResult =
+            vkAcquireNextImage2KHR(ctx.device, &swapChainIndexAcquireInfo, &swapchainIndex);
+
+        if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+            // Swapchain no longer matches surface (resize, etc.). Rebuild and
+            // skip this frame. The fence was already reset; re-signal it so
+            // the next iteration's wait completes immediately.
+            RecreateSwapchain(ctx);
+
+            vkQueueSubmit(ctx.queues[ctx.selectedQueueFamilyIndex],
+                          0u,
+                          nullptr,
+                          ctx.frameFenceRenderComplete[frameInFlightIndex]);
+
+            continue;
+        }
+        // VK_SUBOPTIMAL_KHR from acquire is still a successful acquire; render
+        // this frame and handle the rebuild after present.
+        ThrowOnFail(acquireResult == VK_SUCCESS || acquireResult == VK_SUBOPTIMAL_KHR);
 
         auto& cmd = ctx.frameCommandBuffer[frameInFlightIndex];
 
@@ -614,7 +697,13 @@ void Aule::Dispatch(Context&                                ctx,
             presentInfo.waitSemaphoreCount = 1u;
             presentInfo.pWaitSemaphores    = &ctx.swapchainSemaphoreRenderComplete[swapchainIndex];
         }
-        ThrowOnFail(vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex], &presentInfo));
+        const VkResult presentResult =
+            vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex], &presentInfo);
+
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
+            RecreateSwapchain(ctx);
+        else
+            ThrowOnFail(presentResult);
 
         // -----------------------
 

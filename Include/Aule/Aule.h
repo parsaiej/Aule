@@ -83,6 +83,10 @@ namespace Aule
         VkSurfaceCapabilitiesKHR surfaceInfo;
         VkSwapchainKHR           swapchain;
 
+        // Stashed at startup so swapchain recreation (on resize) reuses the
+        // same format/colorspace selection.
+        VkSurfaceFormatKHR       selectedSurfaceFormat;
+
         // ----- Per swapchain image (indexed by swapchainIndex) -----
         // The driver decides this count. Resources here are tied to specific
         // swapchain images; the render-complete semaphore must be per-image
