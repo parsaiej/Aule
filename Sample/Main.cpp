@@ -29,9 +29,10 @@ int main(int argc, char** argv)
 {
     Aule::Params params = {};
     {
-        params.windowName   = "Aule Sample";
-        params.windowWidth  = 1280u;
-        params.windowHeight = 720u;
+        params.windowName       = "Aule Sample";
+        params.windowWidth      = 1280u;
+        params.windowHeight     = 720u;
+        params.deviceExtensions = { "TESTASDSDSD" };
     }
 
     try
@@ -109,9 +110,10 @@ int main(int argc, char** argv)
 
         Aule::DestroyContext(context);
     }
-    catch (std::runtime_error& e)
+    catch (const std::exception& e)
     {
-        std::cout << "Fatal: " << e.what() << std::endl;
+        std::cout << e.what() << std::endl;
+        return 1;
     }
 
     return 0;

@@ -38,6 +38,7 @@
 // -----------------
 
 #include <volk.h>
+#include <vulkan/vk_enum_string_helper.h>
 
 // VMA
 // -----------------

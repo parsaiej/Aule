@@ -24,13 +24,28 @@
 
 using namespace Aule;
 
-inline void ThrowOnFail(bool succeeded)
+// Throws std::runtime_error on failure. Each call site supplies a short
+// `context` string describing what was being attempted, which is embedded
+// in the exception message to make failures actionable.
+//
+// The VkResult overload stringifies the result code via the Vulkan SDK's
+// string_VkResult() helper from <vulkan/vk_enum_string_helper.h>. The bool
+// overload is for non-VkResult checks (non-null handles, count > 0,
+// extension availability, etc.).
+inline void ThrowOnFail(VkResult result, const char* context)
 {
-    if (!succeeded)
-        throw std::runtime_error("Internal Vulkan call failed.");
+    if (result == VK_SUCCESS)
+        return;
+
+    throw std::runtime_error(std::string("[Aule] ") + context +
+                             " failed: " + string_VkResult(result));
 }
 
-inline void ThrowOnFail(VkResult result) { ThrowOnFail(result == VK_SUCCESS); }
+inline void ThrowOnFail(bool succeeded, const char* context)
+{
+    if (!succeeded)
+        throw std::runtime_error(std::string("[Aule] ") + context);
+}
 
 // -----------------------
 // Swapchain lifecycle helpers
@@ -44,7 +59,8 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
 {
     ThrowOnFail(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx.selectedPhysicalDevice,
                                                           ctx.surface,
-                                                          &ctx.surfaceInfo));
+                                                          &ctx.surfaceInfo),
+                "querying surface capabilities");
 
     VkExtent2D extent = ctx.surfaceInfo.currentExtent;
 
@@ -75,10 +91,12 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
         swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     }
 
-    ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain));
+    ThrowOnFail(vkCreateSwapchainKHR(ctx.device, &swapChainInfo, nullptr, &ctx.swapchain),
+                "creating swapchain");
 
     ThrowOnFail(
-        vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.swapchainImageCount, nullptr));
+        vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &ctx.swapchainImageCount, nullptr),
+        "querying swapchain image count");
 
     ctx.swapchainImages.resize(ctx.swapchainImageCount);
     ctx.swapchainImageViews.resize(ctx.swapchainImageCount);
@@ -87,7 +105,8 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
     ThrowOnFail(vkGetSwapchainImagesKHR(ctx.device,
                                         ctx.swapchain,
                                         &ctx.swapchainImageCount,
-                                        ctx.swapchainImages.data()));
+                                        ctx.swapchainImages.data()),
+                "retrieving swapchain images");
 
     for (uint32_t imageIndex = 0u; imageIndex < ctx.swapchainImageCount; imageIndex++)
     {
@@ -95,7 +114,8 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
         ThrowOnFail(vkCreateSemaphore(ctx.device,
                                       &semaphoreInfo,
                                       nullptr,
-                                      &ctx.swapchainSemaphoreRenderComplete[imageIndex]));
+                                      &ctx.swapchainSemaphoreRenderComplete[imageIndex]),
+                    "creating swapchain render-complete semaphore");
 
         VkImageViewCreateInfo imageViewInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
         imageViewInfo.viewType                      = VK_IMAGE_VIEW_TYPE_2D;
@@ -113,7 +133,8 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
         ThrowOnFail(vkCreateImageView(ctx.device,
                                       &imageViewInfo,
                                       nullptr,
-                                      &ctx.swapchainImageViews[imageIndex]));
+                                      &ctx.swapchainImageViews[imageIndex]),
+                    "creating swapchain image view");
     }
 }
 
@@ -187,7 +208,7 @@ Context Aule::CreateContext(const Params& params)
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 #endif
 
-    ThrowOnFail(glfwInit());
+    ThrowOnFail(glfwInit() == GLFW_TRUE, "glfwInit failed");
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -197,9 +218,9 @@ Context Aule::CreateContext(const Params& params)
                                   nullptr,
                                   nullptr);
 
-    ThrowOnFail(ctx.window);
+    ThrowOnFail(ctx.window != nullptr, "glfwCreateWindow returned null");
 
-    ThrowOnFail(volkInitialize());
+    ThrowOnFail(volkInitialize(), "initializing volk (no Vulkan loader found?)");
 
     // ----------------------------------
 
@@ -222,21 +243,25 @@ Context Aule::CreateContext(const Params& params)
         instanceInfo.ppEnabledExtensionNames = requiredExtensionsGLFW;
     }
 
-    ThrowOnFail(vkCreateInstance(&instanceInfo, nullptr, &ctx.instance));
+    ThrowOnFail(vkCreateInstance(&instanceInfo, nullptr, &ctx.instance),
+                "creating Vulkan instance");
 
     volkLoadInstance(ctx.instance);
 
     // ----------------------------------
 
     uint32_t physicalDeviceCount;
-    ThrowOnFail(vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, nullptr));
+    ThrowOnFail(vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, nullptr),
+                "enumerating physical device count");
 
     // No drivers found!
-    ThrowOnFail(physicalDeviceCount > 0);
+    ThrowOnFail(physicalDeviceCount > 0,
+                "no Vulkan-capable physical devices found (is a GPU driver installed?)");
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     ThrowOnFail(
-        vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, physicalDevices.data()));
+        vkEnumeratePhysicalDevices(ctx.instance, &physicalDeviceCount, physicalDevices.data()),
+        "enumerating physical devices");
 
     ctx.selectedPhysicalDevice = VK_NULL_HANDLE;
 
@@ -341,7 +366,10 @@ Context Aule::CreateContext(const Params& params)
         };
 
         for (const auto& requestedExtension : extensions)
-            ThrowOnFail(DeviceExtensionSupported(requestedExtension));
+            ThrowOnFail(
+                DeviceExtensionSupported(requestedExtension),
+                (std::string("required device extension not supported: ") + requestedExtension)
+                    .c_str());
     }
 
     VkPhysicalDeviceFeatures2                features                = {};
@@ -364,7 +392,8 @@ Context Aule::CreateContext(const Params& params)
     deviceInfo.enabledExtensionCount   = extensions.size();
     deviceInfo.ppEnabledExtensionNames = extensions.data();
 
-    ThrowOnFail(vkCreateDevice(ctx.selectedPhysicalDevice, &deviceInfo, nullptr, &ctx.device));
+    ThrowOnFail(vkCreateDevice(ctx.selectedPhysicalDevice, &deviceInfo, nullptr, &ctx.device),
+                "creating Vulkan logical device");
 
     volkLoadDevice(ctx.device);
 
@@ -378,19 +407,22 @@ Context Aule::CreateContext(const Params& params)
     // Surface
     // ---------------------
 
-    ThrowOnFail(glfwCreateWindowSurface(ctx.instance, ctx.window, nullptr, &ctx.surface));
+    ThrowOnFail(glfwCreateWindowSurface(ctx.instance, ctx.window, nullptr, &ctx.surface),
+                "creating window surface (glfwCreateWindowSurface)");
 
     uint32_t surfaceFormatCount;
     ThrowOnFail(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx.selectedPhysicalDevice,
                                                      ctx.surface,
                                                      &surfaceFormatCount,
-                                                     nullptr));
+                                                     nullptr),
+                "querying surface format count");
 
     std::vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatCount);
     ThrowOnFail(vkGetPhysicalDeviceSurfaceFormatsKHR(ctx.selectedPhysicalDevice,
                                                      ctx.surface,
                                                      &surfaceFormatCount,
-                                                     surfaceFormats.data()));
+                                                     surfaceFormats.data()),
+                "retrieving surface formats");
 
     // Stash the chosen format so swapchain recreation on resize uses the same
     // format/colorspace. (TODO: smarter selection — prefer B8G8R8A8 sRGB.)
@@ -418,21 +450,24 @@ Context Aule::CreateContext(const Params& params)
         ThrowOnFail(vkCreateSemaphore(ctx.device,
                                       &semaphoreInfo,
                                       nullptr,
-                                      &ctx.frameSemaphoreImageAvailable[frameInFlightIndex]));
+                                      &ctx.frameSemaphoreImageAvailable[frameInFlightIndex]),
+                    "creating frame image-available semaphore");
 
         VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceInfo.flags             = VK_FENCE_CREATE_SIGNALED_BIT;
         ThrowOnFail(vkCreateFence(ctx.device,
                                   &fenceInfo,
                                   nullptr,
-                                  &ctx.frameFenceRenderComplete[frameInFlightIndex]));
+                                  &ctx.frameFenceRenderComplete[frameInFlightIndex]),
+                    "creating frame render-complete fence");
 
         VkCommandPoolCreateInfo commandPoolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
         commandPoolInfo.queueFamilyIndex        = ctx.selectedQueueFamilyIndex;
         ThrowOnFail(vkCreateCommandPool(ctx.device,
                                         &commandPoolInfo,
                                         nullptr,
-                                        &ctx.frameCommandPool[frameInFlightIndex]));
+                                        &ctx.frameCommandPool[frameInFlightIndex]),
+                    "creating frame command pool");
 
         VkCommandBufferAllocateInfo commandAllocateInfo = {
             VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
@@ -441,7 +476,8 @@ Context Aule::CreateContext(const Params& params)
         commandAllocateInfo.commandPool        = ctx.frameCommandPool[frameInFlightIndex];
         ThrowOnFail(vkAllocateCommandBuffers(ctx.device,
                                              &commandAllocateInfo,
-                                             &ctx.frameCommandBuffer[frameInFlightIndex]));
+                                             &ctx.frameCommandBuffer[frameInFlightIndex]),
+                    "allocating frame command buffer");
     }
 
     // Memory Allocator
@@ -460,7 +496,7 @@ Context Aule::CreateContext(const Params& params)
         allocatorInfo.physicalDevice   = ctx.selectedPhysicalDevice;
         allocatorInfo.pVulkanFunctions = &allocatorFunctions;
     }
-    ThrowOnFail(vmaCreateAllocator(&allocatorInfo, &ctx.allocator));
+    ThrowOnFail(vmaCreateAllocator(&allocatorInfo, &ctx.allocator), "creating VMA allocator");
 
     // -----------------------
 
@@ -585,14 +621,16 @@ void Aule::Dispatch(Context&                                ctx,
         }
         // VK_SUBOPTIMAL_KHR from acquire is still a successful acquire; render
         // this frame and handle the rebuild after present.
-        ThrowOnFail(acquireResult == VK_SUCCESS || acquireResult == VK_SUBOPTIMAL_KHR);
+        ThrowOnFail(acquireResult == VK_SUCCESS || acquireResult == VK_SUBOPTIMAL_KHR,
+                    "vkAcquireNextImage2KHR returned an unexpected result");
 
         auto& cmd = ctx.frameCommandBuffer[frameInFlightIndex];
 
-        ThrowOnFail(vkResetCommandPool(ctx.device, ctx.frameCommandPool[frameInFlightIndex], 0x0));
+        ThrowOnFail(vkResetCommandPool(ctx.device, ctx.frameCommandPool[frameInFlightIndex], 0x0),
+                    "resetting frame command pool");
 
         VkCommandBufferBeginInfo cmdInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-        ThrowOnFail(vkBeginCommandBuffer(cmd, &cmdInfo));
+        ThrowOnFail(vkBeginCommandBuffer(cmd, &cmdInfo), "beginning frame command buffer");
 
         // -----------------------
 
@@ -667,7 +705,7 @@ void Aule::Dispatch(Context&                                ctx,
 
         // -----------------------
 
-        ThrowOnFail(vkEndCommandBuffer(cmd));
+        ThrowOnFail(vkEndCommandBuffer(cmd), "ending frame command buffer");
 
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
@@ -687,7 +725,8 @@ void Aule::Dispatch(Context&                                ctx,
         ThrowOnFail(vkQueueSubmit(ctx.queues[ctx.selectedQueueFamilyIndex],
                                   1u,
                                   &submitInfo,
-                                  ctx.frameFenceRenderComplete[frameInFlightIndex]));
+                                  ctx.frameFenceRenderComplete[frameInFlightIndex]),
+                    "submitting frame command buffer");
 
         VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
         {
@@ -703,7 +742,7 @@ void Aule::Dispatch(Context&                                ctx,
         if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
             RecreateSwapchain(ctx);
         else
-            ThrowOnFail(presentResult);
+            ThrowOnFail(presentResult, "presenting swapchain image");
 
         // -----------------------
 
