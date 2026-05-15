@@ -586,7 +586,10 @@ void Aule::Dispatch(Context&                      ctx,
             submitInfo.pWaitSemaphores      = &ctx.frameSemaphoreImageAvailable[frameIndex];
             submitInfo.pWaitDstStageMask    = &waitStage;
             submitInfo.signalSemaphoreCount = 1u;
-            submitInfo.pSignalSemaphores    = &ctx.frameSemaphoreRenderComplete[frameIndex];
+            // Indexed by swapchainIndex: this semaphore is waited on by
+            // vkQueuePresentKHR against a specific swapchain image, so its
+            // lifetime is tied to the image, not the frame-in-flight slot.
+            submitInfo.pSignalSemaphores    = &ctx.frameSemaphoreRenderComplete[swapchainIndex];
         }
         ThrowOnFail(vkQueueSubmit(ctx.queues[ctx.selectedQueueFamilyIndex],
                                   1u,
@@ -599,7 +602,7 @@ void Aule::Dispatch(Context&                      ctx,
             presentInfo.pSwapchains        = &ctx.swapchain;
             presentInfo.pImageIndices      = &swapchainIndex;
             presentInfo.waitSemaphoreCount = 1u;
-            presentInfo.pWaitSemaphores    = &ctx.frameSemaphoreRenderComplete[frameIndex];
+            presentInfo.pWaitSemaphores    = &ctx.frameSemaphoreRenderComplete[swapchainIndex];
         }
         ThrowOnFail(vkQueuePresentKHR(ctx.queues[ctx.selectedQueueFamilyIndex], &presentInfo));
 
