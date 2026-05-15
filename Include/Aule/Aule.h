@@ -20,6 +20,9 @@
  * SOFTWARE.
  */
 
+#ifndef AULE_H
+#define AULE_H
+
 namespace Aule
 {
     struct Params
@@ -85,7 +88,7 @@ namespace Aule
 
         // Stashed at startup so swapchain recreation (on resize) reuses the
         // same format/colorspace selection.
-        VkSurfaceFormatKHR       selectedSurfaceFormat;
+        VkSurfaceFormatKHR selectedSurfaceFormat;
 
         // ----- Per swapchain image (indexed by swapchainIndex) -----
         // The driver decides this count. Resources here are tied to specific
@@ -128,9 +131,11 @@ namespace Aule
     //                        any application-owned per-frame ring buffers).
     //   swapchainIndex     - use to index per-swapchain-image resources
     //                        (swapchainImages, swapchainImageViews).
-    void Dispatch(
-        Context&                                                              context,
-        std::function<void(uint32_t frameInFlightIndex, uint32_t swapchainIndex)> renderFrameCallback,
-        std::mutex*                                                           pDispatchQueueMutex = nullptr);
+    void Dispatch(Context& context,
+                  std::function<void(uint32_t frameInFlightIndex, uint32_t swapchainIndex)>
+                              renderFrameCallback,
+                  std::mutex* pDispatchQueueMutex = nullptr);
 
 } // namespace Aule
+
+#endif
