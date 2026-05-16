@@ -75,11 +75,21 @@ static void CreateSwapchainAndPerImageResources(Context& ctx)
     }
 #endif
 
+    // Request one more than the driver's minimum so the CPU isn't stalled
+    // when the presentation engine is holding an image. Clamp to the driver's
+    // max if one is advertised (maxImageCount == 0 means no upper bound).
+    uint32_t desiredImageCount = ctx.surfaceInfo.minImageCount + 1u;
+    if (ctx.surfaceInfo.maxImageCount > 0u &&
+        desiredImageCount > ctx.surfaceInfo.maxImageCount)
+    {
+        desiredImageCount = ctx.surfaceInfo.maxImageCount;
+    }
+
     VkSwapchainCreateInfoKHR swapChainInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
     {
         swapChainInfo.presentMode         = VK_PRESENT_MODE_FIFO_KHR;
         swapChainInfo.surface             = ctx.surface;
-        swapChainInfo.minImageCount       = ctx.surfaceInfo.minImageCount;
+        swapChainInfo.minImageCount       = desiredImageCount;
         swapChainInfo.imageExtent         = extent;
         swapChainInfo.preTransform        = ctx.surfaceInfo.currentTransform;
         swapChainInfo.pQueueFamilyIndices = &ctx.selectedQueueFamilyIndex;
@@ -179,14 +189,65 @@ static void RecreateSwapchain(Context& ctx)
 
     vkDeviceWaitIdle(ctx.device);
 
-    const uint32_t oldImageCount = ctx.swapchainImageCount;
-
     DestroySwapchainAndPerImageResources(ctx);
     CreateSwapchainAndPerImageResources(ctx);
 
-    // If the image count changed, ImGui's Vulkan backend needs to know.
-    if (ctx.swapchainImageCount != oldImageCount)
-        ImGui_ImplVulkan_SetMinImageCount(ctx.swapchainImageCount);
+    // ImGui's Vulkan backend ring size is tied to framesInFlight (see
+    // CreateContext for the rationale), which does not change on resize, so
+    // ImGui_ImplVulkan_SetMinImageCount is intentionally not called here.
+}
+
+// Best-effort teardown of a partially-constructed Context. Used by
+// CreateContext's catch path: any handle still at VK_NULL_HANDLE / empty was
+// never created and is skipped, so this is safe to call at any point.
+static void DestroyPartialContext(Context& ctx, bool imguiContextCreated)
+{
+    if (ctx.device != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(ctx.device);
+
+    if (ctx.device != VK_NULL_HANDLE)
+        DestroySwapchainAndPerImageResources(ctx);
+
+    // Free command pools (and the command buffers they own) before draining
+    // user deletion queues — see the matching note in DestroyContext for why.
+    for (auto& pool : ctx.frameCommandPool)
+        if (pool != VK_NULL_HANDLE)
+            vkDestroyCommandPool(ctx.device, pool, nullptr);
+    for (auto& sem : ctx.frameSemaphoreImageAvailable)
+        if (sem != VK_NULL_HANDLE)
+            vkDestroySemaphore(ctx.device, sem, nullptr);
+    for (auto& fence : ctx.frameFenceRenderComplete)
+        if (fence != VK_NULL_HANDLE)
+            vkDestroyFence(ctx.device, fence, nullptr);
+
+    if (imguiContextCreated)
+    {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+
+    for (auto& frameDeletionQueue : ctx.frameDeletionQueues)
+    {
+        while (!frameDeletionQueue.empty())
+        {
+            frameDeletionQueue.front()();
+            frameDeletionQueue.pop_front();
+        }
+    }
+
+    if (ctx.surface != VK_NULL_HANDLE)
+        vkDestroySurfaceKHR(ctx.instance, ctx.surface, nullptr);
+    if (ctx.allocator != VK_NULL_HANDLE)
+        vmaDestroyAllocator(ctx.allocator);
+    if (ctx.device != VK_NULL_HANDLE)
+        vkDestroyDevice(ctx.device, nullptr);
+    if (ctx.instance != VK_NULL_HANDLE)
+        vkDestroyInstance(ctx.instance, nullptr);
+
+    if (ctx.window != nullptr)
+        glfwDestroyWindow(ctx.window);
+    glfwTerminate();
 }
 
 // Implementation
@@ -195,10 +256,14 @@ static void RecreateSwapchain(Context& ctx)
 Context Aule::CreateContext(const Params& params)
 {
     Context ctx = {};
+    bool    imguiContextCreated = false;
 
     assert(params.windowName != nullptr);
     assert(params.windowWidth != 0);
     assert(params.windowHeight != 0);
+
+    try
+    {
 
     // ----------------------------------
 
@@ -304,8 +369,9 @@ Context Aule::CreateContext(const Params& params)
         if (!(ctx.queueFamilyProperties[queueFamilyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT))
             continue;
 
-        // Just grab first graphics compatible queue.
+        // Grab the first graphics-capable queue family and stop.
         ctx.selectedQueueFamilyIndex = queueFamilyIndex;
+        break;
     }
 
     // ----------------------------------
@@ -424,9 +490,23 @@ Context Aule::CreateContext(const Params& params)
                                                      surfaceFormats.data()),
                 "retrieving surface formats");
 
-    // Stash the chosen format so swapchain recreation on resize uses the same
-    // format/colorspace. (TODO: smarter selection — prefer B8G8R8A8 sRGB.)
+    // Prefer a well-behaved 8-bit BGRA format (sRGB or UNORM) so ImGui colors
+    // render correctly. Some drivers advertise an HDR/wide-gamut format at
+    // index 0, which makes a naive selection look wrong. Fall back to index 0
+    // if nothing matches.
     ctx.selectedSurfaceFormat = surfaceFormats.at(0);
+    for (const auto& candidate : surfaceFormats)
+    {
+        const bool isPreferredFormat = candidate.format == VK_FORMAT_B8G8R8A8_SRGB ||
+                                       candidate.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                                       candidate.format == VK_FORMAT_R8G8B8A8_SRGB ||
+                                       candidate.format == VK_FORMAT_R8G8B8A8_UNORM;
+        if (isPreferredFormat && candidate.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR)
+        {
+            ctx.selectedSurfaceFormat = candidate;
+            break;
+        }
+    }
 
     CreateSwapchainAndPerImageResources(ctx);
 
@@ -502,6 +582,7 @@ Context Aule::CreateContext(const Params& params)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    imguiContextCreated = true;
 
     ImGui_ImplGlfw_InitForVulkan(ctx.window, true);
 
@@ -512,8 +593,17 @@ Context Aule::CreateContext(const Params& params)
         imguiInfo.Device              = ctx.device;
         imguiInfo.QueueFamily         = ctx.selectedQueueFamilyIndex;
         imguiInfo.Queue               = ctx.queues[ctx.selectedQueueFamilyIndex];
-        imguiInfo.MinImageCount       = ctx.swapchainImageCount;
-        imguiInfo.ImageCount          = ctx.swapchainImageCount;
+        // ImGui's Vulkan backend keeps an internal ring of per-frame vertex/
+        // index buffers sized by ImageCount and advances one slot per
+        // RenderDrawData call. When the user's UI grows (e.g. opens a panel),
+        // the backend reallocates the slot's buffer SYNCHRONOUSLY, destroying
+        // the old one. For that destroy to be safe, the slot's prior
+        // submission must have completed. Sizing the ring to framesInFlight
+        // (not swapchainImageCount) means a full ring cycle == framesInFlight
+        // RenderDrawData calls, by which point our per-frame fence wait has
+        // guaranteed the GPU is done with that slot.
+        imguiInfo.MinImageCount       = ctx.framesInFlight;
+        imguiInfo.ImageCount          = ctx.framesInFlight;
         imguiInfo.UseDynamicRendering = true;
         imguiInfo.DescriptorPoolSize  = params.maxSupportedImguiImages;
 
@@ -529,6 +619,15 @@ Context Aule::CreateContext(const Params& params)
     // -----------------------
 
     return ctx;
+
+    }
+    catch (...)
+    {
+        // Any partially-constructed Vulkan/GLFW/ImGui state gets torn down
+        // before the exception propagates to the caller.
+        DestroyPartialContext(ctx, imguiContextCreated);
+        throw;
+    }
 }
 
 void Aule::DestroyContext(Context& context)
@@ -538,7 +637,13 @@ void Aule::DestroyContext(Context& context)
     // Per-swapchain-image resources (incl. swapchain itself).
     DestroySwapchainAndPerImageResources(context);
 
-    // Per-frame-in-flight resources.
+    // Per-frame-in-flight resources. Destroy the command pools FIRST: this
+    // frees every command buffer they own and releases the validation-layer
+    // "in use" reference count on any buffers/images those command buffers
+    // recorded against. Without this, draining the user deletion queues
+    // below trips VUID-vkDestroyBuffer-buffer-00922 even though the GPU has
+    // long been idle (the spec is satisfied; the validation tracker is more
+    // conservative).
     for (uint32_t i = 0u; i < context.framesInFlight; i++)
     {
         vkDestroyCommandPool(context.device, context.frameCommandPool[i], nullptr);
@@ -546,8 +651,24 @@ void Aule::DestroyContext(Context& context)
         vkDestroyFence(context.device, context.frameFenceRenderComplete[i], nullptr);
     }
 
+    // ImGui's Vulkan backend owns its own per-frame vertex/index buffers.
+    // Shut it down before draining user deletion queues so its command-buffer
+    // references are released too, and before vmaDestroyAllocator / device
+    // teardown.
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    // Now safe to run any pending per-frame deletion lambdas (typically
+    // user-owned vkDestroyBuffer / vmaDestroyImage calls).
+    for (auto& frameDeletionQueue : context.frameDeletionQueues)
+    {
+        while (!frameDeletionQueue.empty())
+        {
+            frameDeletionQueue.front()();
+            frameDeletionQueue.pop_front();
+        }
+    }
 
     vkDestroySurfaceKHR(context.instance, context.surface, nullptr);
     vmaDestroyAllocator(context.allocator);
@@ -555,6 +676,7 @@ void Aule::DestroyContext(Context& context)
     vkDestroyInstance(context.instance, nullptr);
 
     glfwDestroyWindow(context.window);
+    glfwTerminate();
 }
 
 void Aule::Dispatch(Context&                                ctx,
@@ -683,10 +805,13 @@ void Aule::Dispatch(Context&                                ctx,
         }
         vkCmdBeginRendering(cmd, &renderingInfo);
 
-        // If the user provided a mutex, lock it here and now (ImGui may do some
-        // internal queue submissions).
+        // If the user provided a mutex, hold it across ImGui's render + draw
+        // submission (ImGui's Vulkan backend can issue internal work). The
+        // lock must outlive both calls below — a `std::lock_guard` declared
+        // inside an `if` body would die at the next `;` and protect nothing.
+        std::unique_lock<std::mutex> dispatchLock;
         if (pDispatchQueueMutex)
-            std::lock_guard _(*pDispatchQueueMutex);
+            dispatchLock = std::unique_lock<std::mutex>(*pDispatchQueueMutex);
 
         ImGui::Render();
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);

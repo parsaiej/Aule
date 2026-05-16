@@ -29,10 +29,10 @@ int main(int argc, char** argv)
 {
     Aule::Params params = {};
     {
-        params.windowName       = "Aule Sample";
-        params.windowWidth      = 1280u;
-        params.windowHeight     = 720u;
-        params.deviceExtensions = { "TESTASDSDSD" };
+        params.windowName     = "Aule Sample";
+        params.windowWidth    = 1280u;
+        params.windowHeight   = 720u;
+        params.framesInFlight = 2u;
     }
 
     try
