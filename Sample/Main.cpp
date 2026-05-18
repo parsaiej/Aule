@@ -29,9 +29,10 @@ int main(int argc, char** argv)
 {
     Aule::Params params = {};
     {
-        params.windowName   = "Aule Sample";
-        params.windowWidth  = 1280u;
-        params.windowHeight = 720u;
+        params.windowName     = "Aule Sample";
+        params.windowWidth    = 1280u;
+        params.windowHeight   = 720u;
+        params.framesInFlight = 2u;
     }
 
     try
@@ -47,10 +48,10 @@ int main(int argc, char** argv)
         VkDependencyInfo barriers = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 
         Aule::Dispatch(context,
-                       [&](uint32_t frameIndex)
+                       [&](uint32_t frameInFlightIndex, uint32_t swapchainIndex)
                        {
-                           auto& cmd        = context.frameCommandBuffer[frameIndex];
-                           auto& backbuffer = context.frameImages[frameIndex];
+                           auto& cmd        = context.frameCommandBuffer[frameInFlightIndex];
+                           auto& backbuffer = context.swapchainImages[swapchainIndex];
 
                            // -----
 
@@ -109,9 +110,10 @@ int main(int argc, char** argv)
 
         Aule::DestroyContext(context);
     }
-    catch (std::runtime_error& e)
+    catch (const std::exception& e)
     {
-        std::cout << "Fatal: " << e.what() << std::endl;
+        std::cout << e.what() << std::endl;
+        return 1;
     }
 
     return 0;

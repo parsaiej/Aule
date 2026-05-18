@@ -20,6 +20,9 @@
  * SOFTWARE.
  */
 
+#ifndef AULE_H
+#define AULE_H
+
 namespace Aule
 {
     struct Params
@@ -40,6 +43,12 @@ namespace Aule
         // Due to how ImGui Vulkan images work we need to specify descriptor
         // pool size.
         uint32_t maxSupportedImguiImages = 512u;
+
+        // Number of CPU-side render iterations the application is allowed to
+        // have in flight on the GPU concurrently. Independent of swapchain
+        // image count. 2 is a sensible default; 3 reduces CPU stalls at the
+        // cost of more memory and one frame of input latency.
+        uint32_t framesInFlight = 2u;
     };
 
     struct Context
@@ -77,14 +86,27 @@ namespace Aule
         VkSurfaceCapabilitiesKHR surfaceInfo;
         VkSwapchainKHR           swapchain;
 
-        // Index with the `frameIndex` passed by the Dispatch callback.
-        uint32_t                                       frameImageCount;
-        std::vector<VkImage>                           frameImages;
-        std::vector<VkImageView>                       frameImageViews;
+        // Stashed at startup so swapchain recreation (on resize) reuses the
+        // same format/colorspace selection.
+        VkSurfaceFormatKHR selectedSurfaceFormat;
+
+        // ----- Per swapchain image (indexed by swapchainIndex) -----
+        // The driver decides this count. Resources here are tied to specific
+        // swapchain images; the render-complete semaphore must be per-image
+        // because vkQueuePresentKHR waits on it against a specific image.
+        uint32_t                 swapchainImageCount;
+        std::vector<VkImage>     swapchainImages;
+        std::vector<VkImageView> swapchainImageViews;
+        std::vector<VkSemaphore> swapchainSemaphoreRenderComplete;
+
+        // ----- Per frame-in-flight (indexed by frameInFlightIndex) -----
+        // Application-chosen via Params::framesInFlight. Resources here gate
+        // CPU/GPU overlap and are independent of how many swapchain images
+        // the driver hands out.
+        uint32_t                                       framesInFlight;
         std::vector<VkCommandPool>                     frameCommandPool;
         std::vector<VkCommandBuffer>                   frameCommandBuffer;
         std::vector<VkSemaphore>                       frameSemaphoreImageAvailable;
-        std::vector<VkSemaphore>                       frameSemaphoreRenderComplete;
         std::vector<VkFence>                           frameFenceRenderComplete;
         std::vector<std::deque<std::function<void()>>> frameDeletionQueues;
     };
@@ -102,8 +124,18 @@ namespace Aule
     // synchronization. and call back the user render function to fill out
     // commands for current frame. Callback MUST transfer the current swapchain
     // image to PRESENT.
-    void Dispatch(Context&                                 context,
-                  std::function<void(uint32_t frameIndex)> renderFrameCallback,
-                  std::mutex*                              pDispatchQueueMutex = nullptr);
+    //
+    // The callback receives two indices:
+    //   frameInFlightIndex - use to index per-frame-in-flight resources
+    //                        (frameCommandBuffer, frameDeletionQueues, and
+    //                        any application-owned per-frame ring buffers).
+    //   swapchainIndex     - use to index per-swapchain-image resources
+    //                        (swapchainImages, swapchainImageViews).
+    void Dispatch(Context& context,
+                  std::function<void(uint32_t frameInFlightIndex, uint32_t swapchainIndex)>
+                              renderFrameCallback,
+                  std::mutex* pDispatchQueueMutex = nullptr);
 
 } // namespace Aule
+
+#endif
