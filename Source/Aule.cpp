@@ -273,6 +273,22 @@ Context Aule::CreateContext(const Params& params)
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 #endif
 
+#ifdef __APPLE__
+    // MoltenVK only forwards Vulkan object names (vkSetDebugUtilsObjectNameEXT)
+    // to the underlying MTLResource.label when its `debugMode` config is on.
+    // Without this, Xcode Instruments (Metal Resource Allocations, Metal
+    // System Trace, Resource Events) and GPU frame captures see every Metal
+    // resource as unnamed even though we labeled the Vulkan side.
+    //
+    // Driving it via the env var is the most portable knob: it works on every
+    // MoltenVK version and doesn't require linking the MVK-specific
+    // vkSetMoltenVKConfigurationMVK entry point. Must be set BEFORE
+    // volkInitialize / instance creation so the loader picks it up.
+    //
+    // setenv(..., 0) means "don't clobber a user override from the shell".
+    setenv("MVK_CONFIG_DEBUG", "1", 0);
+#endif
+
     ThrowOnFail(glfwInit() == GLFW_TRUE, "glfwInit failed");
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -301,11 +317,21 @@ Context Aule::CreateContext(const Params& params)
     uint32_t requiredExtensionsCountGLFW;
     auto requiredExtensionsGLFW = glfwGetRequiredInstanceExtensions(&requiredExtensionsCountGLFW);
 
+    // Merge GLFW's required instance extensions with our own. We unconditionally
+    // request VK_EXT_debug_utils so that Aule::Debug::SetName(...) calls (which
+    // forward to vkSetDebugUtilsObjectNameEXT) are wired through to the driver.
+    // On MoltenVK these names propagate to the underlying MTLBuffer/MTLTexture
+    // `.label`, which is what Xcode Instruments (Metal Resource Allocations,
+    // Metal System Trace) displays per GPU resource.
+    std::vector<const char*> enabledInstanceExtensions(
+        requiredExtensionsGLFW, requiredExtensionsGLFW + requiredExtensionsCountGLFW);
+    enabledInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
     {
         instanceInfo.pApplicationInfo        = &applicationInfo;
-        instanceInfo.enabledExtensionCount   = requiredExtensionsCountGLFW;
-        instanceInfo.ppEnabledExtensionNames = requiredExtensionsGLFW;
+        instanceInfo.enabledExtensionCount   = static_cast<uint32_t>(enabledInstanceExtensions.size());
+        instanceInfo.ppEnabledExtensionNames = enabledInstanceExtensions.data();
     }
 
     ThrowOnFail(vkCreateInstance(&instanceInfo, nullptr, &ctx.instance),
