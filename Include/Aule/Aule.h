@@ -90,6 +90,18 @@ namespace Aule
         // same format/colorspace selection.
         VkSurfaceFormatKHR selectedSurfaceFormat;
 
+        // Present mode currently baked into the swapchain. Defaults to
+        // VK_PRESENT_MODE_FIFO_KHR (vsync) at CreateContext time; can be
+        // changed at runtime via SetPresentMode. Picking IMMEDIATE here
+        // uncaps the framerate (useful for perf measurement); MAILBOX
+        // gives low-latency vsync.
+        VkPresentModeKHR presentMode;
+
+        // All present modes the surface + physical device advertise as
+        // supported. Queried once at CreateContext. Per Vulkan spec FIFO
+        // is always present; everything else is optional.
+        std::vector<VkPresentModeKHR> supportedPresentModes;
+
         // ----- Per swapchain image (indexed by swapchainIndex) -----
         // The driver decides this count. Resources here are tied to specific
         // swapchain images; the render-complete semaphore must be per-image
@@ -119,6 +131,13 @@ namespace Aule
 
     // Destroy provided operating system window and Vulkan runtime.
     void DestroyContext(Context& context);
+
+    // Swap the active swapchain present mode. Idles the device, tears down
+    // and recreates the swapchain (and per-image resources) under the
+    // hood, so this is safe to call between frames but NOT from inside a
+    // recording command buffer. The requested mode MUST be present in
+    // Context::supportedPresentModes; otherwise the call is a no-op.
+    void SetPresentMode(Context& context, VkPresentModeKHR mode);
 
     // Dispatch a renderloop handling swapchain, frames in flight, basic
     // synchronization. and call back the user render function to fill out
